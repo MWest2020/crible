@@ -78,8 +78,9 @@ avoid wasted tool-calls and tokens.
 
 ### Requirement: Enforce a configurable cost/token ceiling
 
-The system SHALL enforce an explicit, configurable token/cost ceiling per run and SHALL halt
-the run when the ceiling is reached, returning the best result available so far.
+The system SHALL enforce an explicit, configurable cumulative token ceiling per run and SHALL
+halt the run when the ceiling is reached, returning the best result available so far. The
+ceiling is token-based (provider-independent); a monetary/USD cap is out of scope for the MVP.
 
 #### Scenario: Cost ceiling halts the run
 

@@ -4,8 +4,9 @@
 - [ ] 1.2 Add EUPL-1.2 LICENSE and SPDX headers convention; add README with scope + anti-pattern
 - [ ] 1.3 Add `.gitignore` (Python, venv, run outputs, secrets) and a `CHANGELOG.md`
 - [ ] 1.4 Add the Anthropic SDK dependency via `uv`; record lockfile
-- [ ] 1.5 Create config module: provider/model, API-key reference (env/vault), cost ceiling,
-      parallelisation switch (default OFF), per-thread iteration/tool-call bounds, subagent cap
+- [ ] 1.5 Create config module: provider/model, API-key reference (env/vault), cumulative
+      token ceiling, parallelisation switch (default OFF), corroboration threshold (default ≥2),
+      per-thread iteration/tool-call bounds, subagent cap
 - [ ] 1.6 Add the version-controlled trust-tier seed list (`source_tiers.yaml`) with low/high
       source-type patterns
 

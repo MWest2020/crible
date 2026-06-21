@@ -29,13 +29,23 @@ trail.
 - **WHEN** the source tree and run logs are inspected
 - **THEN** no API key or token literal is present
 
-### Requirement: Run-level cost and parallelisation are configurable
+### Requirement: Run-level limits and parallelisation are configurable
 
-The token/cost ceiling and the parallelisation switch SHALL be explicit configuration with
-safe defaults: parallelisation defaults to OFF and a cost ceiling is always set.
+The system SHALL expose the cumulative token ceiling, the parallelisation switch, and the
+independent-corroboration threshold as explicit configuration with safe defaults:
+parallelisation defaults to OFF, a token ceiling is always set, and the corroboration
+threshold defaults to ≥ 2.
 
 #### Scenario: Defaults are safe when nothing is configured
 
-- **WHEN** a run starts with no explicit cost/parallelisation settings
-- **THEN** parallelisation is OFF and a default cost ceiling is in effect
+- **WHEN** a run starts with no explicit limit/parallelisation settings
+- **THEN** parallelisation is OFF, a default token ceiling is in effect, and the
+  corroboration threshold is ≥ 2
 - **AND** the effective settings are recorded in the audit trail
+
+#### Scenario: Operator overrides the corroboration threshold
+
+- **WHEN** the operator sets the corroboration threshold in configuration
+- **THEN** the run requires that many independent corroborations before a claim or failure
+  mode may affect ranking
+- **AND** the effective threshold is recorded in the audit trail

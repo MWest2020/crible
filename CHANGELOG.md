@@ -21,3 +21,13 @@ All notable changes to this project are documented here. Dates are ISO 8601.
 - Added README, LICENSE (EUPL-1.2), `.gitignore`.
 
 No implementation code yet — proposal awaits approval.
+
+### 2026-06-21 — Resolved open design questions
+
+- Resolved all 6 open questions in `design.md` (Open Questions → Resolved Decisions):
+  YAML+regex trust-seed; corroboration threshold ≥2 (configurable); token-based cost
+  ceiling (no USD cap in MVP); `plan.json` external memory; advice to Markdown + stdout;
+  docs in English.
+- Embedded the concrete values into the specs (failure-mode threshold ≥2, token ceiling,
+  provider-configuration run-level config keys) and `tasks.md`.
+- Re-validated with `openspec validate --strict`.

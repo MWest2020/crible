@@ -15,8 +15,8 @@ the disqualifiers extracted from the question.
 
 #### Scenario: Candidate fails the disqualifier in independent high-trust sources
 
-- **WHEN** the disqualifying failure mode is reported by independent high-trust sources above
-  the corroboration threshold
+- **WHEN** the disqualifying failure mode is reported by independent high-trust sources at or
+  above the corroboration threshold (default ≥ 2 independent, configurable)
 - **THEN** the system marks the candidate as disqualified
 - **AND** records the failure mode, the corroborating sources, and the corroboration count
 

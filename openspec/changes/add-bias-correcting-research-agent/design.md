@@ -146,22 +146,26 @@ Greenfield — no migration. Rollout is local install only:
 
 Rollback: delete the local checkout; there is no deployed service and no shared state.
 
-## Open Questions
+## Resolved Decisions
 
-These are design choices the brief leaves open; proposed defaults are marked. Please
-confirm or override before implementation.
+The open questions from the brief were resolved with the operator on 2026-06-21. The chosen
+options are now binding design decisions:
 
-- **OQ1 — Trust-tier seed format**: a single committed YAML (`source_tiers.yaml`) mapping
-  source-type patterns → tier? *Proposed default: yes, YAML, with regex/domain patterns.*
-- **OQ2 — "Independent corroboration" threshold**: minimum count before a positive claim
-  or a disqualifying failure mode is allowed to affect ranking. *Proposed default: ≥2
-  independent corroborations, configurable.*
-- **OQ3 — Default cost ceiling**: a concrete default token/USD cap per run.
-  *Proposed default: a conservative token cap (e.g. ~200k input-equivalent) that halts the
-  run; configurable.*
-- **OQ4 — Persistence of the LEAD plan ("external memory")**: a JSON file under the run
-  directory. *Proposed default: yes, `plan.json` alongside the JSONL trail.*
-- **OQ5 — Output channel**: write the advice as Markdown to the run directory and also
-  print to stdout? *Proposed default: both.*
-- **OQ6 — Spec/doc language**: specs and docs in English for OSS portability.
-  *Proposed default: English (this document).*
+- **OQ1 — Trust-tier seed format** → **YAML with domain + regex patterns.** A single
+  version-controlled `source_tiers.yaml` maps source-type patterns to a tier. Boring,
+  readable, diffable, editable without code changes. (See D3.)
+- **OQ2 — Independent-corroboration threshold** → **≥ 2 independent corroborations,
+  configurable.** A claim or disqualifying failure mode may affect ranking only when
+  corroborated by at least 2 independent sources; the value is a config key. One post is
+  never evidence. (See D4.)
+- **OQ3 — Cost ceiling** → **conservative cumulative token cap, configurable.** The run
+  halts on the token cap and returns best-so-far. Provider-independent; no maintained price
+  table needed. A USD cap is explicitly NOT implemented in the MVP. (See D9.)
+- **OQ4 — LEAD plan persistence** → **yes, `plan.json` per run** alongside the JSONL audit
+  trail in the run directory, so the plan survives long runs. (See D1/D7.)
+- **OQ5 — Output channel** → **Markdown file + stdout.** The advice is written as
+  `advice.md` in the run directory and also printed to stdout.
+- **OQ6 — Spec/doc language** → **English**, for open-source portability and the widest
+  contributor reach.
+
+No open questions remain. The change is ready for implementation approval.
