@@ -68,6 +68,14 @@ class Config:
         """Pick the web_search tool version that matches the configured model."""
         return _WEB_SEARCH_NEW if self.model in _NEW_SEARCH_MODELS else _WEB_SEARCH_BASIC
 
+    def uses_advanced_reasoning(self) -> bool:
+        """Whether the model accepts adaptive thinking + the effort parameter.
+
+        Both error on Haiku 4.5 and older models, so they are sent only for the
+        modern Opus/Sonnet/Fable tier. Other models simply run without them.
+        """
+        return self.model in _NEW_SEARCH_MODELS
+
     def resolve_api_key(self) -> str:
         """Read the API key from the environment; fail fast if absent.
 

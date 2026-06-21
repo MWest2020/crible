@@ -73,12 +73,7 @@ class LLMClient:
 
     def _create(self, **kwargs: Any) -> Any:
         self.check_ceiling()
-        resp = self._client.messages.create(
-            model=self.config.model,
-            thinking={"type": "adaptive"},
-            output_config={"effort": self.config.effort},
-            **kwargs,
-        )
+        resp = self._client.messages.create(model=self.config.model, **kwargs)
         self._account(getattr(resp, "usage", None))
         return resp
 
@@ -95,12 +90,16 @@ class LLMClient:
         text_parts: list[str] = []
 
         for _ in range(self.config.max_iterations_per_thread):
-            resp = self._create(
-                max_tokens=8000,
-                system=system,
-                tools=[tool],
-                messages=messages,
-            )
+            kwargs: dict[str, Any] = {
+                "max_tokens": 8000,
+                "system": system,
+                "tools": [tool],
+                "messages": messages,
+            }
+            if self.config.uses_advanced_reasoning():
+                kwargs["thinking"] = {"type": "adaptive"}
+                kwargs["output_config"] = {"effort": self.config.effort}
+            resp = self._create(**kwargs)
             self._collect(resp, sources, queries, text_parts)
 
             if resp.stop_reason == "pause_turn":
@@ -120,15 +119,17 @@ class LLMClient:
 
     def extract(self, system: str, prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
         """Return JSON validated against `schema` (no tools, deterministic shape)."""
-        resp = self._create(
-            max_tokens=8000,
-            system=system,
-            messages=[{"role": "user", "content": prompt}],
-            output_config={
-                "effort": self.config.effort,
-                "format": {"type": "json_schema", "schema": schema},
-            },
-        )
+        output_config: dict[str, Any] = {"format": {"type": "json_schema", "schema": schema}}
+        kwargs: dict[str, Any] = {
+            "max_tokens": 8000,
+            "system": system,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if self.config.uses_advanced_reasoning():
+            kwargs["thinking"] = {"type": "adaptive"}
+            output_config["effort"] = self.config.effort
+        kwargs["output_config"] = output_config
+        resp = self._create(**kwargs)
         text = next((b.text for b in resp.content if getattr(b, "type", "") == "text"), "")
         try:
             return json.loads(text)
