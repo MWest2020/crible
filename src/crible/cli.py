@@ -31,7 +31,20 @@ from .orchestrator import Orchestrator
 
 def _slug(text: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
-    return (s[:40] or "run").rstrip("-")
+    if len(s) > 45:
+        s = s[:45].rsplit("-", 1)[0]  # trim to a whole word, not mid-word
+    return s or "run"
+
+
+def _run_dir(runs_dir, slug: str, stamp: str):
+    """Readable, slug-forward run directory: <slug>_<YYYY-MM-DD>, with -2/-3 on clash."""
+    base = f"{slug}_{stamp}"
+    candidate = runs_dir / base
+    n = 2
+    while candidate.exists():
+        candidate = runs_dir / f"{base}-{n}"
+        n += 1
+    return candidate
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
@@ -120,8 +133,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    run_dir = config.runs_dir / f"{stamp}-{_slug(args.question)}"
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    run_dir = _run_dir(config.runs_dir, _slug(args.question), stamp)
     log = AuditLog(run_dir, secrets=config.redaction_values())
 
     orchestrator = Orchestrator(config, log)

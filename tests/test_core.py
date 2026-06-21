@@ -489,6 +489,58 @@ def test_grounded_quote_is_kept(monkeypatch, tmp_path) -> None:
     assert len(cand.findings) == 1 and cand.findings[0].quote == quote
 
 
+def test_disqualifier_must_be_proven_for_recommendation() -> None:
+    from crible.advice import _disqualifier_proven, render
+    crit = Criteria(question="best thermos", disqualifiers=["metallic taste"])
+    src = [Source(url="https://reddit.com/r/coffee/1", tier="high"),
+           Source(url="https://www.home-barista.com/t/9", tier="high")]
+    heat = Finding(candidate="A", kind="support", claim="keeps hot",
+                   criterion="keeps coffee hot", sources=src, corroboration_count=2)
+    cand = Candidate(name="A", findings=[heat])
+    # credible support exists, but NOT about the disqualifier -> not proven
+    assert _disqualifier_proven(cand, crit.disqualifiers) is False
+    doc = render(crit, [cand], corroboration_threshold=2)
+    assert "NOT proven by lived experience" in doc
+    # add a disqualifier-addressing credible finding -> proven
+    taste = Finding(candidate="A", kind="support", claim="no metal taste",
+                    criterion="metallic taste", sources=src, corroboration_count=2)
+    cand2 = Candidate(name="A", findings=[heat, taste])
+    assert _disqualifier_proven(cand2, crit.disqualifiers) is True
+
+
+def test_no_disqualifier_means_vacuously_proven() -> None:
+    from crible.advice import _disqualifier_proven
+    cand = Candidate(name="A")
+    assert _disqualifier_proven(cand, []) is True
+
+
+def test_quote_attribution_guard_drops_offtopic(monkeypatch, tmp_path) -> None:
+    # A quote about a DIFFERENT product (Stanley) must not attach to Zojirushi.
+    url = "https://www.home-barista.com/t/9"
+    fake = _FakeClient(
+        research_results=[_rr(url), _rr("")],
+        extract_results=[{"findings": [{
+            "kind": "support", "claim": "hot", "quote": "my Stanley keeps coffee hot all day",
+            "criterion": "keeps coffee hot", "severity": "unknown", "corroboration_count": 2,
+            "source_urls": [url], "skepticism_flags": [],
+        }]}],
+    )
+    orch = _make_orchestrator(monkeypatch, fake, tmp_path)
+    orch.config.fetch_enabled = True
+    orch._fetcher = _FakeFetcher("forum: my Stanley keeps coffee hot all day, love it")
+    cand = Candidate(name="Zojirushi SM-SF48")
+    orch.investigate(Criteria(question="q", topic="t", disqualifiers=["metallic taste"]), cand)
+    assert cand.findings == []  # 'zojirushi' not in the quote -> dropped as misattributed
+
+
+def test_run_dir_is_slug_forward(tmp_path) -> None:
+    from crible.cli import _run_dir, _slug
+    d = _run_dir(tmp_path, _slug("the best travel thermos, no metallic taste"), "2026-06-21")
+    assert d.name.startswith("the-best-travel-thermos")
+    assert d.name.endswith("2026-06-21")
+    assert "T" not in d.name and "Z" not in d.name  # no ugly ISO stamp
+
+
 def test_quote_is_rendered_in_advice() -> None:
     from crible.advice import render
     src = [Source(url="https://www.reddit.com/r/coffee/1", tier="high")]

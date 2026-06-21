@@ -4,6 +4,23 @@ All notable changes to this project are documented here. Dates are ISO 8601.
 
 ## [Unreleased]
 
+### 2026-06-21 — Disqualifier-depth gate, quote-attribution guard, readable run IDs
+
+- **Disqualifier-depth**: a candidate is "Recommended" only if it has credible
+  (forum/user-review) support that specifically addresses the disqualifier (e.g. a quote
+  about metallic taste). Candidates with credible support for the requirements but no
+  lived-experience evidence on the disqualifier go to a new section "Requirements met — but
+  <disqualifier> NOT proven by lived experience" (shown with quotes, not recommended). Honest
+  disqualifier-first behaviour.
+- **Quote-attribution guard**: in pre-fetch→extract, a finding is dropped if its quote does
+  not mention the candidate's brand token — so a quote about a different product in a
+  multi-product forum thread can't be misattributed (the observed Zojirushi→Thermos bug).
+  Extraction prompt also strengthened to require the quote be about THIS candidate.
+- **Readable run identifiers**: run directories are now `<slug>_<YYYY-MM-DD>` (e.g.
+  `best-travel-thermos-for-quality_2026-06-21`, with `-2`/`-3` on same-day clashes) instead of
+  the ISO `20260621T205202Z-...` stamp.
+- Tests: 37 (+4). Ruff clean.
+
 ### 2026-06-21 — Proof = genuine user experience; retrieval targets reviews + fora
 
 Operator decision after a run where verified quotes came from review blogs + manufacturer

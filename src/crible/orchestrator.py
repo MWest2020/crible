@@ -18,6 +18,8 @@
 
 from __future__ import annotations
 
+import re
+
 from . import advice as advice_mod
 from . import audit as ev
 from . import criteria as criteria_mod
@@ -269,6 +271,14 @@ class Orchestrator:
 
     _FETCH_RANK = {"high": 0, "medium": 1, "unknown": 2, "low": 3}
 
+    @staticmethod
+    def _brand_token(name: str) -> str:
+        """First distinctive word of a candidate name (the brand), for attribution."""
+        for tok in re.findall(r"\w+", name):
+            if len(tok) > 2 and not tok.isdigit():
+                return tok.lower()
+        return ""
+
     def _ingest(self, criteria, candidate, sources, search_text):
         """Turn search results into grounded findings.
 
@@ -327,6 +337,9 @@ class Orchestrator:
             "PROOF means genuine USER EXPERIENCE — a forum/community post or a real user "
             "review on a shop/review platform. Manufacturer pages and review blogs are "
             "context, not proof. Prefer quotes where a user speaks from experience. "
+            f"Each finding MUST be specifically about {candidate.name}: the quote must be "
+            f"about THIS product. If a forum thread discusses several products, do NOT "
+            f"attribute a quote about a different product to {candidate.name}. "
             "For each finding, 'quote' MUST be copied VERBATIM from the text of the source "
             "you cite, and 'source_urls' MUST contain that source's URL exactly. Use only "
             "the sources listed below.\n\n" + "\n\n".join(blocks)
@@ -358,6 +371,15 @@ class Orchestrator:
                 self.log.log(
                     ev.EVENT_NOTE, stage="quote-check", candidate=candidate.name,
                     dropped_claim=claim, reason="quote not in cited page text",
+                )
+                continue
+            # Attribution guard: the quote must mention this candidate's brand, so a
+            # quote about a different product in a multi-product thread isn't misattributed.
+            brand = self._brand_token(candidate.name)
+            if brand and brand not in quote.lower():
+                self.log.log(
+                    ev.EVENT_NOTE, stage="attribution", candidate=candidate.name,
+                    dropped_claim=claim, reason=f"quote does not mention '{brand}'",
                 )
                 continue
             sources = classify_sources(self.tier_list, [Source(url=u) for u in urls])

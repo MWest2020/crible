@@ -15,11 +15,41 @@
 
 from __future__ import annotations
 
+import re
 from urllib.parse import urlparse
 
 from .models import Candidate, Criteria, Finding
 
 _CREDIBLE_TIERS = ("high", "medium")  # genuine lived experience (fora + user reviews)
+
+
+def _addresses_disqualifier(finding: Finding, disqualifiers: list[str]) -> bool:
+    """True if the finding's criterion is about one of the disqualifiers."""
+    crit = finding.criterion.lower()
+    ctokens = set(re.findall(r"\w+", crit))
+    for d in disqualifiers:
+        dl = d.lower()
+        if (dl and dl in crit) or (crit and crit in dl):
+            return True
+        dtokens = {t for t in re.findall(r"\w+", dl) if len(t) > 3}
+        if dtokens & ctokens:
+            return True
+    return False
+
+
+def _disqualifier_proven(cand: Candidate, disqualifiers: list[str]) -> bool:
+    """A recommendation needs credible lived-experience addressing the disqualifier.
+
+    If the question has no disqualifier, this is vacuously satisfied.
+    """
+    if not disqualifiers:
+        return True
+    return any(
+        f.kind == "support"
+        and any(s.tier in _CREDIBLE_TIERS for s in f.sources)
+        and _addresses_disqualifier(f, disqualifiers)
+        for f in cand.findings
+    )
 
 
 def _credible_host_count(findings: list[Finding]) -> int:
@@ -66,11 +96,15 @@ def render(criteria: Criteria, ranked: list[Candidate], corroboration_threshold:
     lines.append("")
 
     rejected = [c for c in ranked if c.disqualified]
-    recommended = [
+    proven = [
         c for c in ranked
         if not c.disqualified and _has_credible_support(c, corroboration_threshold)
     ]
-    # Not disqualified, but only blog/echo-chamber support — not recommendable.
+    # Credible lived experience exists AND it addresses the disqualifier -> recommend.
+    recommended = [c for c in proven if _disqualifier_proven(c, criteria.disqualifiers)]
+    # Credible lived experience for the requirements, but NOT for the disqualifier.
+    disq_unproven = [c for c in proven if not _disqualifier_proven(c, criteria.disqualifiers)]
+    # Not disqualified, but only blog/echo-chamber context — not recommendable.
     unevidenced = [
         c for c in ranked
         if not c.disqualified and not _has_credible_support(c, corroboration_threshold)
@@ -132,6 +166,26 @@ def render(criteria: Criteria, ranked: list[Candidate], corroboration_threshold:
         if cand.caveat:
             lines.append(f"> ⚠ Caveat ({cand.caveat}): limited trusted sources.")
         lines.append("")
+
+    if disq_unproven:
+        disq = ", ".join(criteria.disqualifiers) or "the disqualifier"
+        lines.append(f"## Requirements met — but “{disq}” NOT proven by lived experience")
+        lines.append(
+            "_These have credible user-experience support for the requirements, but no "
+            f"forum/user-review evidence specifically about “{disq}” — so the key concern is "
+            "unverified. Shown with their quotes; not recommended until the disqualifier is "
+            "proven:_"
+        )
+        for cand in disq_unproven:
+            caveat = f" — ⚠ {cand.caveat}" if cand.caveat else ""
+            lines.append(f"### {cand.name}{caveat}")
+            for f in [x for x in cand.findings if x.kind == "support"][:5]:
+                crit = f" [{f.criterion}]" if f.criterion else ""
+                lines.append(f"- {f.claim}{crit} ({f.corroboration_count} sources)")
+                if f.quote:
+                    lines.append(f"  > “{f.quote}”")
+                lines.extend(_links([f]))
+            lines.append("")
 
     if unevidenced:
         lines.append("## Context only — no lived-experience proof")
