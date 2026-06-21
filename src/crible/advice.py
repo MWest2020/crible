@@ -95,11 +95,27 @@ def render(criteria: Criteria, ranked: list[Candidate], corroboration_threshold:
             crit = f" [{f.criterion}]" if f.criterion else ""
             lines.append(f"- {f.claim}{crit} ({f.corroboration_count} independent sources)")
             lines.extend(_links([f]))
+        if cand.caveat:
+            lines.append(
+                f"> ⚠ Caveat ({cand.caveat}): too few trusted fora / user-review sources — "
+                "treat this recommendation with caution."
+            )
         lines.append("")
 
     lines.append("## Avoid")
+    floor_caveats = any(c.caveat for c in ranked)
     if not rejected:
-        lines.append("_No candidate was disqualified._")
+        if floor_caveats:
+            lines.append(
+                "_No candidate was disqualified — BUT some candidates lacked enough trusted "
+                "(fora / user-review) sources (see caveats above). A clean result here may mean "
+                '"not enough trustworthy evidence to judge", NOT "confirmed safe"._'
+            )
+        else:
+            lines.append(
+                "_No candidate was disqualified: trusted sources (fora / user reviews) were "
+                "searched and no disqualifying failure was corroborated._"
+            )
     for cand in rejected:
         failures = [f for f in cand.findings if f.kind == "failure"]
         lines.append(f"### {cand.name}")
@@ -110,6 +126,8 @@ def render(criteria: Criteria, ranked: list[Candidate], corroboration_threshold:
                 f"<{f.claim}>{crit} (severity: {f.severity})."
             )
             lines.extend(_links([f]))
+        if cand.caveat:
+            lines.append(f"> ⚠ Caveat ({cand.caveat}): limited trusted sources.")
         lines.append("")
 
     if unevidenced:
@@ -120,7 +138,8 @@ def render(criteria: Criteria, ranked: list[Candidate], corroboration_threshold:
             "recommended:_"
         )
         for cand in unevidenced:
-            lines.append(f"- {cand.name}")
+            suffix = f" — ⚠ {cand.caveat}" if cand.caveat else ""
+            lines.append(f"- {cand.name}{suffix}")
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"

@@ -4,6 +4,34 @@ All notable changes to this project are documented here. Dates are ISO 8601.
 
 ## [Unreleased]
 
+### 2026-06-21 — Implement retrieval steering + evidence-mix floor
+
+Applied OpenSpec change `steer-retrieval-toward-trusted-sources` (single-threaded; reduces
+blog tokens, adds at most one bounded re-search — no multiplier).
+
+- **Domain-steered dual-pass search** (`llm.py`, `orchestrator.py`): a high-trust pass
+  (`allowed_domains` from the seed list's domain-listed fora + review platforms) and an open
+  pass (`blocked_domains` = known affiliate/blog domains). Graceful degradation if a provider
+  rejects the domain params (skip steering + log, never fail). The `allowed_domains`
+  limitation (domain-listed only, not regex/path fora) is handled by the open pass + query
+  augmentation, per design D1.
+- **Deterministic forum/review query augmentation** (`config.query_templates`): reddit
+  desire-path, `site:` per listed forum, "review"/"long-term"; templates applied are logged.
+- **Evidence-mix floor** (`skepticism.py`, `orchestrator.py`): low-tier never corroborates;
+  configurable floor (default 2) on distinct high+medium sources; one bounded high-trust
+  re-search on breach; a loud, logged `evidence-mix-floor-not-met` caveat when still short,
+  surfaced in the advice. The Avoid section now disambiguates "nothing failed" from
+  "insufficient trustworthy sources".
+- **New config** (`CRIBLE_*` + CLI): `evidence_mix_floor`, `evidence_research_extra_passes`
+  (hard-capped at 1), `domain_steering_enabled`, `query_templates`. Per-pass `max_uses`
+  lowered to 2 so the dual pass stays within budget.
+- **New audit events**: `search_domains`, `query_templates`, `source_tier_mix`,
+  `floor_check`, `evidence_mix_floor_not_met` — the run stays fully reconstructable.
+- **Tests** (24 total, +4): steering allow/block lists derived from the seed; floor breach
+  triggers exactly one bounded re-search; floor-not-met emits the caveat and the advice
+  surfaces it; extra-passes clamped to 1. Ruff clean.
+- README updated with the new flags/env vars and behaviour.
+
 ### 2026-06-21 — Initial OpenSpec proposal
 
 - Initialised repository: Python/`uv` + EUPL-1.2 + OpenSpec-first conventions.

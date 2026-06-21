@@ -92,3 +92,33 @@ class TierList:
             if rule.matches(url, host):
                 return Source(url=url, title=title, tier=rule.tier, tier_rule=rule.id)
         return Source(url=url, title=title, tier="unknown", tier_rule="unmatched")
+
+    # ---- retrieval steering ----------------------------------------------
+    # Derive allow/block DOMAIN lists for web_search steering from the same seed
+    # list (single source of truth, no learned component). Only domain-match
+    # rules can be expressed as a domain filter; regex/path forum rules cannot —
+    # callers must compensate (dual pass + query augmentation), see design D1.
+
+    def _domain_entries(self) -> list[tuple[str, str, str]]:
+        """Yield (domain, tier, rule_id) for every usable domain-match pattern."""
+        out: list[tuple[str, str, str]] = []
+        for rule in self._rules:
+            if rule.match != "domain":
+                continue
+            for pat in rule.patterns:
+                dom = pat.strip().lower().rstrip(".")
+                if "." in dom:  # skip bare substrings like "amazon." — not a domain
+                    out.append((dom, rule.tier, rule.id))
+        return out
+
+    def allow_domains(self) -> list[str]:
+        """Domain-listed high+medium sources, for the high-trust search pass."""
+        return sorted({d for d, t, _ in self._domain_entries() if t in ("high", "medium")})
+
+    def block_domains(self) -> list[str]:
+        """Domain-listed low-trust (blog/affiliate) sources, for the open pass."""
+        return sorted({d for d, t, _ in self._domain_entries() if t == "low"})
+
+    def domain_rule_map(self) -> dict[str, str]:
+        """Map each steering domain to the seed rule id that produced it (audit)."""
+        return {d: rid for d, _, rid in self._domain_entries()}

@@ -35,6 +35,12 @@ EVENT_COST = "cost"
 EVENT_DEDUP = "dedup"
 EVENT_STOP = "stop"
 EVENT_NOTE = "note"
+# Retrieval-steering + evidence-mix events (change: steer-retrieval-toward-trusted-sources)
+EVENT_SEARCH_DOMAINS = "search_domains"  # allowed/blocked domains per search pass
+EVENT_QUERY_TEMPLATES = "query_templates"  # augmentation templates applied per search
+EVENT_SOURCE_TIER_MIX = "source_tier_mix"  # per-finding / per-candidate tier counts
+EVENT_FLOOR_CHECK = "floor_check"  # evidence-mix floor evaluation (before/after re-search)
+EVENT_FLOOR_NOT_MET = "evidence_mix_floor_not_met"  # loud caveat: too few trusted sources
 
 
 def _redact(value: Any, secrets: list[str]) -> Any:

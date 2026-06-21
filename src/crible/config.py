@@ -56,7 +56,20 @@ class Config:
     parallelism_enabled: bool = False  # default OFF — explicit opt-in only
     max_subagents: int = 8
     max_iterations_per_thread: int = 3  # bounded tool-use loop per thread
-    max_search_uses_per_thread: int = 3  # web_search max_uses cap (token-heavy)
+    max_search_uses_per_thread: int = 2  # web_search max_uses cap PER PASS (token-heavy)
+
+    # Retrieval steering + evidence-mix (change: steer-retrieval-toward-trusted-sources).
+    domain_steering_enabled: bool = True  # dual-pass allow/block steering
+    evidence_mix_floor: int = 2  # min distinct high+medium sources before a clean verdict
+    evidence_research_extra_passes: int = 1  # bounded re-search on floor breach (hard cap 1)
+    query_templates: list[str] = field(
+        default_factory=lambda: [
+            "{candidate} {disqualifier} reddit",
+            "{candidate} {disqualifier} forum",
+            "{candidate} {disqualifier} review",
+            "{candidate} long-term review experience",
+        ]
+    )
 
     # Skepticism / ranking.
     corroboration_threshold: int = 2  # >= 2 independent corroborations
@@ -154,6 +167,12 @@ def load_config(**overrides: Any) -> Config:
         cfg.source_tiers_path = Path(v)
     if v := env.get("CRIBLE_RUNS_DIR"):
         cfg.runs_dir = Path(v)
+    if v := env.get("CRIBLE_DOMAIN_STEERING"):
+        cfg.domain_steering_enabled = v.strip() in ("1", "true", "yes", "on")
+    if v := env.get("CRIBLE_EVIDENCE_MIX_FLOOR"):
+        cfg.evidence_mix_floor = int(v)
+    if v := env.get("CRIBLE_EVIDENCE_EXTRA_PASSES"):
+        cfg.evidence_research_extra_passes = int(v)
 
     for key, value in overrides.items():
         if not hasattr(cfg, key):
@@ -164,4 +183,8 @@ def load_config(**overrides: Any) -> Config:
         raise ConfigError("token_ceiling must be positive")
     if cfg.corroboration_threshold < 1:
         raise ConfigError("corroboration_threshold must be >= 1")
+    if cfg.evidence_mix_floor < 1:
+        raise ConfigError("evidence_mix_floor must be >= 1")
+    # Hard cap the re-search at one extra pass — bounded, never a loop.
+    cfg.evidence_research_extra_passes = max(0, min(1, cfg.evidence_research_extra_passes))
     return cfg

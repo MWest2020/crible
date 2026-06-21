@@ -27,7 +27,7 @@ from .audit import AuditLog
 from .config import Config
 from .llm import CostCeilingReached, LLMClient
 from .models import Candidate, Criteria, Finding, Source
-from .skepticism import classify_sources, evaluate_finding
+from .skepticism import classify_sources, count_independent, evaluate_finding
 from .sources import TierList
 
 _LANDSCAPE_SCHEMA = {
@@ -132,6 +132,15 @@ class Orchestrator:
         self.log = log
         self.client = LLMClient(config)
         self.tier_list = TierList.load(config.source_tiers_path)
+        # Steering domain lists, derived once from the seed tier list (design D4).
+        if config.domain_steering_enabled:
+            self._allow_domains = self.tier_list.allow_domains()
+            self._block_domains = sorted(
+                set(self.tier_list.block_domains()) | set(config.blocked_search_domains)
+            )
+        else:
+            self._allow_domains = []
+            self._block_domains = []
 
     # ---- stage 1: criteria ------------------------------------------------
 
@@ -185,26 +194,59 @@ class Orchestrator:
 
     # ---- stage 3: subagent threads (failure-hunting) ---------------------
 
-    def investigate(self, criteria: Criteria, candidate: Candidate) -> None:
-        prompt = (
-            f"Candidate: {candidate.name}\n"
-            f"User requirements: {criteria.positive}\n"
-            f"Disqualifiers to hunt: {criteria.disqualifiers}\n"
-            f"Context: {criteria.context}\n\n"
-            "Investigate this candidate and return condensed findings."
+    def _augmented_queries(self, criteria: Criteria, candidate: Candidate) -> list[str]:
+        """Deterministic forum/review-targeted queries from the seed templates."""
+        disq = (
+            criteria.disqualifiers[0]
+            if criteria.disqualifiers
+            else (criteria.positive[0] if criteria.positive else "review")
         )
-        research = self.client.research(_SUBAGENT_SYSTEM, prompt)
+        queries = [
+            t.format(candidate=candidate.name, disqualifier=disq)
+            for t in self.config.query_templates
+        ]
+        # site: queries for the first couple of listed specialist fora (steering hint).
+        for forum in self._allow_domains[:2]:
+            queries.append(f"site:{forum} {candidate.name} {disq}")
+        return queries
+
+    def _search_pass(
+        self,
+        candidate: Candidate,
+        prompt: str,
+        label: str,
+        templates: list[str],
+        *,
+        allowed_domains: list[str] | None = None,
+        blocked_domains: list[str] | None = None,
+    ):
+        """One steered research pass; logs its domains, templates and queries."""
+        research = self.client.research(
+            _SUBAGENT_SYSTEM, prompt,
+            allowed_domains=allowed_domains, blocked_domains=blocked_domains,
+        )
+        self.log.log(
+            ev.EVENT_SEARCH_DOMAINS, candidate=candidate.name, pass_=label,
+            allowed=research.allowed_domains or [], blocked=research.blocked_domains or [],
+            degraded=research.degraded,
+        )
+        self.log.log(
+            ev.EVENT_QUERY_TEMPLATES, candidate=candidate.name, pass_=label, templates=templates
+        )
         for q in research.queries:
-            self.log.log(ev.EVENT_QUERY, stage="subagent", candidate=candidate.name, query=q)
+            self.log.log(ev.EVENT_QUERY, stage=label, candidate=candidate.name, query=q)
         for src in research.sources:
             self.log.log(
                 ev.EVENT_SOURCE_VISITED, candidate=candidate.name, url=src.url, title=src.title
             )
+        return research
 
-        # Ground the extraction: give the model the exact URLs it actually
-        # visited and constrain findings to them, so claims cite real sources
-        # (no grounding = no claim — the model cannot recall URLs reliably).
-        visited = list(dict.fromkeys(s.url for s in research.sources))
+    def _extract_findings(
+        self, criteria: Criteria, candidate: Candidate, text: str, visited: list[str]
+    ) -> None:
+        """Extract findings grounded ONLY in the visited URLs; classify + evaluate."""
+        if not text.strip():
+            return
         visited_set = set(visited)
         visited_block = "\n".join(visited) if visited else "(no sources were retrieved)"
         data = self.client.extract(
@@ -212,22 +254,17 @@ class Orchestrator:
             prompt=(
                 f"From this investigation of {candidate.name}, return the findings.\n\n"
                 f"Sources you actually visited (cite source_urls ONLY from this list, "
-                f"verbatim):\n{visited_block}\n\nResearch notes:\n{research.text}"
+                f"verbatim):\n{visited_block}\n\nResearch notes:\n{text}"
             ),
             schema=_FINDINGS_SCHEMA,
         )
         for raw in data.get("findings", []):
-            # Drop any URL the model invented that was not actually visited.
             urls = [u for u in raw.get("source_urls", []) if u in visited_set]
-            sources = [Source(url=u) for u in urls]
-            sources = classify_sources(self.tier_list, sources)
+            sources = classify_sources(self.tier_list, [Source(url=u) for u in urls])
             for s in sources:
                 self.log.log(
-                    ev.EVENT_CLASSIFICATION,
-                    candidate=candidate.name,
-                    url=s.url,
-                    tier=s.tier,
-                    rule=s.tier_rule,
+                    ev.EVENT_CLASSIFICATION, candidate=candidate.name,
+                    url=s.url, tier=s.tier, rule=s.tier_rule,
                 )
             reported = int(raw.get("corroboration_count", 0))
             finding = Finding(
@@ -240,23 +277,91 @@ class Orchestrator:
                 corroboration_count=reported,
                 skepticism_flags=list(raw.get("skepticism_flags", [])),
             )
-            fired = evaluate_finding(finding, self.config.corroboration_threshold)
-            for rule in fired:
+            for rule in evaluate_finding(finding, self.config.corroboration_threshold):
                 self.log.log(
-                    ev.EVENT_SKEPTICISM_RULE,
-                    candidate=candidate.name,
-                    rule=rule,
-                    claim=finding.claim,
+                    ev.EVENT_SKEPTICISM_RULE, candidate=candidate.name,
+                    rule=rule, claim=finding.claim,
                 )
             self.log.log(
-                ev.EVENT_CORROBORATION,
-                candidate=candidate.name,
-                claim=finding.claim,
-                reported_count=reported,  # what the model claimed
-                credible_count=finding.corroboration_count,  # after credible-only gating
+                ev.EVENT_CORROBORATION, candidate=candidate.name, claim=finding.claim,
+                reported_count=reported, credible_count=finding.corroboration_count,
             )
+            self.log.log(ev.EVENT_SOURCE_TIER_MIX, candidate=candidate.name, claim=finding.claim,
+                         **self._tier_mix(finding))
             self.log.log(ev.EVENT_FINDING, **finding.to_dict())
             candidate.findings.append(finding)
+
+    def _tier_mix(self, finding: Finding) -> dict:
+        counts = {"high": 0, "medium": 0, "low": 0, "unknown": 0}
+        for s in finding.sources:
+            counts[s.tier] = counts.get(s.tier, 0) + 1
+        credible = count_independent(finding.sources)  # distinct high+medium hosts
+        return {
+            "tiers": counts,
+            "credible_hosts": credible,
+            "floor": self.config.evidence_mix_floor,
+            "meets_floor": credible >= self.config.evidence_mix_floor,
+        }
+
+    def _candidate_credible_hosts(self, candidate: Candidate) -> int:
+        all_sources = [s for f in candidate.findings for s in f.sources]
+        return count_independent(all_sources)
+
+    def investigate(self, criteria: Criteria, candidate: Candidate) -> None:
+        templates = self._augmented_queries(criteria, candidate)
+        tmpl_block = "\n".join(f"- {q}" for q in templates)
+        base = (
+            f"Candidate: {candidate.name}\n"
+            f"User requirements: {criteria.positive}\n"
+            f"Disqualifiers to hunt: {criteria.disqualifiers}\n"
+            f"Context: {criteria.context}\n\n"
+            f"Run web searches including these, then return condensed findings:\n{tmpl_block}\n"
+        )
+        # High-trust pass (allow-list of specialist fora + review platforms) first,
+        # then the open pass (block known affiliate/blog domains).
+        merged_sources: list[Source] = []
+        text_parts: list[str] = []
+        passes = [
+            ("high-trust", {"allowed_domains": self._allow_domains or None}),
+            ("open", {"blocked_domains": self._block_domains or None}),
+        ]
+        for label, steer in passes:
+            research = self._search_pass(candidate, base, label, templates, **steer)
+            merged_sources.extend(research.sources)
+            if research.text:
+                text_parts.append(research.text)
+
+        visited = list(dict.fromkeys(s.url for s in merged_sources))
+        self._extract_findings(criteria, candidate, "\n".join(text_parts), visited)
+
+        # Evidence-mix floor: bounded one-shot high-trust re-search on breach.
+        before = self._candidate_credible_hosts(candidate)
+        self.log.log(
+            ev.EVENT_FLOOR_CHECK, candidate=candidate.name, stage="initial",
+            credible_hosts=before, floor=self.config.evidence_mix_floor,
+            meets_floor=before >= self.config.evidence_mix_floor,
+        )
+        if before < self.config.evidence_mix_floor and self.config.evidence_research_extra_passes:
+            research = self._search_pass(
+                candidate, base + "\nFocus ONLY on specialist forums and user reviews.",
+                "high-trust-research", templates, allowed_domains=self._allow_domains or None,
+            )
+            visited2 = list(dict.fromkeys(s.url for s in research.sources))
+            self._extract_findings(criteria, candidate, research.text, visited2)
+            after = self._candidate_credible_hosts(candidate)
+            self.log.log(
+                ev.EVENT_FLOOR_CHECK, candidate=candidate.name, stage="after-research",
+                credible_hosts=after, floor=self.config.evidence_mix_floor,
+                meets_floor=after >= self.config.evidence_mix_floor,
+            )
+            before = after
+
+        if before < self.config.evidence_mix_floor:
+            candidate.caveat = "evidence-mix-floor-not-met"
+            self.log.log(
+                ev.EVENT_FLOOR_NOT_MET, candidate=candidate.name,
+                credible_hosts=before, floor=self.config.evidence_mix_floor,
+            )
 
     # ---- run --------------------------------------------------------------
 

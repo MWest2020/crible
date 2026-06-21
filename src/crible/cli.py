@@ -49,6 +49,21 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         type=int,
         help="min independent corroborations before a claim affects ranking",
     )
+    p.add_argument(
+        "--evidence-mix-floor",
+        type=int,
+        help="min distinct high+medium sources before a clean verdict (default 2)",
+    )
+    p.add_argument(
+        "--evidence-extra-passes",
+        type=int,
+        help="bounded high-trust re-searches on floor breach (0 or 1; default 1)",
+    )
+    p.add_argument(
+        "--no-domain-steering",
+        action="store_true",
+        help="disable allow/block domain steering of web search",
+    )
     p.add_argument("--runs-dir", help="directory for run outputs (default: runs/)")
     return p.parse_args(argv)
 
@@ -75,6 +90,12 @@ def main(argv: list[str] | None = None) -> int:
         overrides["max_subagents"] = args.max_subagents
     if args.corroboration_threshold:
         overrides["corroboration_threshold"] = args.corroboration_threshold
+    if args.evidence_mix_floor:
+        overrides["evidence_mix_floor"] = args.evidence_mix_floor
+    if args.evidence_extra_passes is not None:
+        overrides["evidence_research_extra_passes"] = args.evidence_extra_passes
+    if args.no_domain_steering:
+        overrides["domain_steering_enabled"] = False
     if args.runs_dir:
         overrides["runs_dir"] = Path(args.runs_dir)
 

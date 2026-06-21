@@ -24,6 +24,25 @@ Each run writes a directory under `runs/` containing `audit.jsonl` (the full tra
 or the matching `CRIBLE_*` environment variables. Parallel subagents are an explicit
 opt-in (`CRIBLE_PARALLEL=1`) and default OFF.
 
+### Retrieval steering & evidence-mix floor
+
+To counter blog/affiliate-dominated search results, retrieval is **steered toward trusted
+sources** and gated by an **evidence-mix floor**:
+
+- **Domain-steered dual pass.** Each candidate is searched twice — a high-trust pass that
+  allow-lists the specialist fora + review platforms named in `config/source_tiers.yaml`,
+  and an open pass that blocks known affiliate/blog domains. (`allowed_domains` only covers
+  domain-listed sources, so the open pass + query augmentation reach the regex/path fora.)
+  Disable with `--no-domain-steering` / `CRIBLE_DOMAIN_STEERING=0`.
+- **Forum/review query augmentation.** Deterministic, logged query templates push searches
+  toward lived experience (reddit, `site:` fora, "review"/"long-term").
+- **Evidence-mix floor.** Blogs never count as corroboration. If a candidate has fewer than
+  `--evidence-mix-floor` (default 2; `CRIBLE_EVIDENCE_MIX_FLOOR`) distinct high+medium
+  sources, one bounded high-trust re-search runs (`--evidence-extra-passes`, default 1,
+  capped at 1; `CRIBLE_EVIDENCE_EXTRA_PASSES`). If still short, the advice carries a loud
+  `evidence-mix-floor-not-met` caveat — a clean "Avoid" section always says whether it means
+  "nothing failed" or "not enough trustworthy sources to judge".
+
 Run the tests with `uv run pytest`.
 
 ## What this is

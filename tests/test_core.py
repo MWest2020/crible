@@ -205,3 +205,102 @@ def test_render_advice_smoke() -> None:
     doc = render(crit, [])
     assert "# Crible advice" in doc
     assert "metallic taste" in doc
+
+
+# ---- retrieval steering + evidence-mix -----------------------------------
+
+def test_steering_domain_lists_from_seed(tier_list: TierList) -> None:
+    allow = tier_list.allow_domains()
+    block = tier_list.block_domains()
+    assert "reddit.com" in allow and "home-barista.com" in allow
+    assert "homegrounds.co" in block
+    # Bare substrings like "amazon." are not valid domains -> skipped, not emitted.
+    assert not any(d.endswith(".") for d in allow + block)
+    assert "amazon" not in allow
+
+
+def test_extra_passes_clamped_to_one() -> None:
+    assert load_config(evidence_research_extra_passes=5).evidence_research_extra_passes == 1
+    assert load_config(evidence_research_extra_passes=0).evidence_research_extra_passes == 0
+
+
+class _FakeClient:
+    """Stand-in for LLMClient: serves queued research/extract results, no network."""
+
+    def __init__(self, research_results, extract_results):
+        self._research = list(research_results)
+        self._extract = list(extract_results)
+        self.research_calls = 0
+        self.extract_calls = 0
+        self.tokens_used = 0
+
+    def check_ceiling(self):
+        pass
+
+    def research(self, system, prompt, allowed_domains=None, blocked_domains=None):
+        self.research_calls += 1
+        from crible.llm import ResearchResult
+        return self._research.pop(0) if self._research else ResearchResult("", [], [])
+
+    def extract(self, system, prompt, schema):
+        self.extract_calls += 1
+        return self._extract.pop(0) if self._extract else {"findings": []}
+
+
+def _rr(url: str):
+    from crible.llm import ResearchResult
+    return ResearchResult(text="notes", sources=[Source(url=url)], queries=[])
+
+
+def _support(url: str):
+    return {"findings": [{
+        "kind": "support", "claim": "ok", "criterion": "taste", "severity": "unknown",
+        "corroboration_count": 5, "source_urls": [url], "skepticism_flags": [],
+    }]}
+
+
+def _make_orchestrator(monkeypatch, fake, tmp_path):
+    from crible.orchestrator import Orchestrator
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy-key")
+    cfg = load_config(evidence_mix_floor=2, evidence_research_extra_passes=1)
+    cfg.source_tiers_path = TIERS
+    orch = Orchestrator(cfg, AuditLog(tmp_path / "run"))
+    orch.client = fake  # bypass the real network client
+    return orch
+
+
+def test_floor_breach_triggers_one_research(monkeypatch, tmp_path) -> None:
+    # First pass finds 1 credible source (below floor 2); re-search adds a second.
+    fake = _FakeClient(
+        research_results=[
+            _rr("https://www.reddit.com/r/coffee/1"),   # high-trust pass
+            _rr(""),                                     # open pass (nothing useful)
+            _rr("https://www.home-barista.com/t/9"),     # the ONE re-search
+        ],
+        extract_results=[
+            _support("https://www.reddit.com/r/coffee/1"),
+            _support("https://www.home-barista.com/t/9"),
+        ],
+    )
+    orch = _make_orchestrator(monkeypatch, fake, tmp_path)
+    cand = Candidate(name="X")
+    orch.investigate(Criteria(question="q", disqualifiers=["metallic taste"]), cand)
+    assert fake.research_calls == 3  # 2 passes + exactly one bounded re-search
+    assert cand.caveat == ""  # floor met after re-search (2 distinct credible hosts)
+
+
+def test_floor_not_met_emits_caveat_and_advice_surfaces_it(monkeypatch, tmp_path) -> None:
+    from crible.advice import render
+    blog = "https://www.homegrounds.co/review"  # low-tier echo chamber
+    fake = _FakeClient(
+        research_results=[_rr(blog), _rr(blog), _rr(blog)],
+        extract_results=[_support(blog), _support(blog)],
+    )
+    orch = _make_orchestrator(monkeypatch, fake, tmp_path)
+    cand = Candidate(name="X")
+    crit = Criteria(question="q", disqualifiers=["metallic taste"])
+    orch.investigate(crit, cand)
+    assert fake.research_calls == 3  # bounded — no loop
+    assert cand.caveat == "evidence-mix-floor-not-met"
+    doc = render(crit, [cand], corroboration_threshold=2)
+    assert "evidence-mix-floor-not-met" in doc

@@ -37,6 +37,9 @@ class ResearchResult:
     text: str
     sources: list[Source]  # web_search results surfaced during the turn
     queries: list[str]  # search queries the model issued
+    allowed_domains: list[str] | None = None  # steering applied this pass
+    blocked_domains: list[str] | None = None
+    degraded: bool = False  # provider rejected domain steering -> ran unsteered
 
 
 class LLMClient:
@@ -49,6 +52,8 @@ class LLMClient:
             kwargs["base_url"] = config.base_url
         self._client = anthropic.Anthropic(**kwargs)
         self.tokens_used = 0
+        # Set False permanently if the provider rejects domain steering once.
+        self._steering_supported = True
 
     # ---- token accounting -------------------------------------------------
 
@@ -77,21 +82,43 @@ class LLMClient:
         self._account(getattr(resp, "usage", None))
         return resp
 
-    def research(self, system: str, prompt: str) -> ResearchResult:
-        """Run one research turn with web_search; loop over pause_turn safely."""
+    def _web_search_tool(
+        self, allowed_domains: list[str] | None, blocked_domains: list[str] | None
+    ) -> dict[str, Any]:
         tool: dict[str, Any] = {
             "type": self.config.web_search_tool_type(),
             "name": "web_search",
             "max_uses": self.config.max_search_uses_per_thread,
         }
-        if self.config.blocked_search_domains:
-            tool["blocked_domains"] = self.config.blocked_search_domains
+        if self._steering_supported:
+            # allowed_domains and blocked_domains are mutually exclusive on one tool.
+            if allowed_domains:
+                tool["allowed_domains"] = allowed_domains
+            elif blocked_domains:
+                tool["blocked_domains"] = blocked_domains
+        return tool
+
+    def research(
+        self,
+        system: str,
+        prompt: str,
+        allowed_domains: list[str] | None = None,
+        blocked_domains: list[str] | None = None,
+    ) -> ResearchResult:
+        """Run one research turn with web_search; loop over pause_turn safely.
+
+        Pass `allowed_domains` for a high-trust pass or `blocked_domains` for the
+        open pass. If the provider rejects domain steering, retry once unsteered
+        and mark the result degraded (the run continues — design D1 / OQ6).
+        """
         messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
         sources: list[Source] = []
         queries: list[str] = []
         text_parts: list[str] = []
+        degraded = False
 
         for _ in range(self.config.max_iterations_per_thread):
+            tool = self._web_search_tool(allowed_domains, blocked_domains)
             kwargs: dict[str, Any] = {
                 "max_tokens": 8000,
                 "system": system,
@@ -101,7 +128,18 @@ class LLMClient:
             if self.config.uses_advanced_reasoning():
                 kwargs["thinking"] = {"type": "adaptive"}
                 kwargs["output_config"] = {"effort": self.config.effort}
-            resp = self._create(**kwargs)
+            try:
+                resp = self._create(**kwargs)
+            except anthropic.BadRequestError as exc:
+                msg = str(exc).lower()
+                if self._steering_supported and (
+                    "allowed_domains" in msg or "blocked_domains" in msg or "domain" in msg
+                ):
+                    # Degrade gracefully: disable steering for the rest of the run.
+                    self._steering_supported = False
+                    degraded = True
+                    continue
+                raise
             self._collect(resp, sources, queries, text_parts)
 
             if resp.stop_reason == "pause_turn":
@@ -113,10 +151,14 @@ class LLMClient:
                 continue
             break  # end_turn / max_tokens / refusal — stop the thread
 
+        applied = self._steering_supported and not degraded
         return ResearchResult(
             text="\n".join(p for p in text_parts if p),
             sources=sources,
             queries=queries,
+            allowed_domains=allowed_domains if applied else None,
+            blocked_domains=blocked_domains if applied else None,
+            degraded=degraded or not self._steering_supported,
         )
 
     def extract(self, system: str, prompt: str, schema: dict[str, Any]) -> dict[str, Any]:

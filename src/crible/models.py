@@ -73,6 +73,7 @@ class Candidate:
     score: float = 0.0
     disqualified: bool = False
     reason: str = ""
+    caveat: str = ""  # e.g. evidence-mix-floor-not-met — surfaced in advice
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
