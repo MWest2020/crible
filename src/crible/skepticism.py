@@ -67,6 +67,28 @@ def count_independent(sources: list[Source]) -> int:
     return len({_host(s.url) for s in sources if s.tier in CREDIBLE_TIERS})
 
 
+def candidate_credible_strength(findings: list[Finding]) -> int:
+    """Strength of a candidate's SUPPORT evidence, as the larger of:
+      - distinct credible (high+medium) hosts across its support findings, and
+      - the best single credible support finding's independent-corroboration count.
+    So several user reviews on ONE marketplace count (operator: "10 user reviews >
+    10 blogs"), and so do a few distinct fora.
+    """
+    supports = [f for f in findings if f.kind == "support"]
+    hosts = {
+        _host(s.url) for f in supports for s in f.sources if s.tier in CREDIBLE_TIERS
+    }
+    best = max(
+        (
+            f.corroboration_count
+            for f in supports
+            if any(s.tier in CREDIBLE_TIERS for s in f.sources)
+        ),
+        default=0,
+    )
+    return max(len(hosts), best)
+
+
 def evaluate_finding(finding: Finding, threshold: int) -> list[str]:
     """Apply skepticism rules; return the rule ids that fired.
 

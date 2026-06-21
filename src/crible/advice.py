@@ -16,9 +16,9 @@
 from __future__ import annotations
 
 import re
-from urllib.parse import urlparse
 
 from .models import Candidate, Criteria, Finding
+from .skepticism import candidate_credible_strength
 
 _CREDIBLE_TIERS = ("high", "medium")  # genuine lived experience (fora + user reviews)
 
@@ -52,23 +52,12 @@ def _disqualifier_proven(cand: Candidate, disqualifiers: list[str]) -> bool:
     )
 
 
-def _credible_host_count(findings: list[Finding]) -> int:
-    hosts = {
-        (urlparse(s.url).hostname or s.url).lower()
-        for f in findings
-        for s in f.sources
-        if s.tier in _CREDIBLE_TIERS
-    }
-    return len(hosts)
-
-
 def _has_credible_support(cand: Candidate, threshold: int) -> bool:
-    """Recommendable when the candidate has >= threshold distinct credible (fora /
-    user-review) hosts across its SUPPORT findings — corroboration accrues across
-    the candidate, not within a single finding (different aspects cite different
-    sources). This matches the evidence-mix floor."""
-    supports = [f for f in cand.findings if f.kind == "support"]
-    return _credible_host_count(supports) >= threshold
+    """Recommendable when the candidate's credible support strength meets the floor —
+    EITHER >= threshold distinct credible hosts, OR a single credible finding with
+    >= threshold independent reviewer corroborations (so many user reviews on one
+    marketplace count). Matches the evidence-mix floor."""
+    return candidate_credible_strength(cand.findings) >= threshold
 
 
 def _links(findings: list[Finding]) -> list[str]:
@@ -117,11 +106,11 @@ def render(criteria: Criteria, ranked: list[Candidate], corroboration_threshold:
         )
     for cand in recommended:
         supports = [f for f in cand.findings if f.kind == "support"]
-        n = _credible_host_count(supports)
+        n = candidate_credible_strength(cand.findings)
         lines.append(f"### {cand.name}")
         lines.append(
-            f"This fits best, because it meets the requirements "
-            f"({n} independent credible sources — fora / user reviews)."
+            f"This fits best, because it meets the requirements with "
+            f"{n} independent user-experience corroborations (fora / user reviews)."
         )
         lines.append(f"_Reason:_ {cand.reason}")
         for f in supports:

@@ -255,7 +255,7 @@ def _rr(url: str):
 def _support(url: str):
     return {"findings": [{
         "kind": "support", "claim": "ok", "criterion": "taste", "severity": "unknown",
-        "corroboration_count": 5, "source_urls": [url], "skepticism_flags": [],
+        "corroboration_count": 1, "source_urls": [url], "skepticism_flags": [],
     }]}
 
 

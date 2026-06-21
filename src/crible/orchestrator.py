@@ -31,7 +31,12 @@ from .fetch import ContentFetcher, quote_matches
 from .links import LinkChecker
 from .llm import CostCeilingReached, LLMClient
 from .models import Candidate, Criteria, Finding, Source
-from .skepticism import classify_sources, count_independent, evaluate_finding
+from .skepticism import (
+    candidate_credible_strength,
+    classify_sources,
+    count_independent,
+    evaluate_finding,
+)
 from .sources import TierList
 
 _LANDSCAPE_SCHEMA = {
@@ -342,8 +347,11 @@ class Orchestrator:
             f"about THIS product. If a forum thread discusses several products, do NOT "
             f"attribute a quote about a different product to {candidate.name}. "
             "For each finding, 'quote' MUST be copied VERBATIM from the text of the source "
-            "you cite, and 'source_urls' MUST contain that source's URL exactly. Use only "
-            "the sources listed below.\n\n" + "\n\n".join(blocks)
+            "you cite, and 'source_urls' MUST contain that source's URL exactly. Set "
+            "'corroboration_count' to the number of DISTINCT users/reviews/posts you saw "
+            "supporting that finding (if several reviewers say the same thing, count them) "
+            "and quote one representative. Use only the sources listed below.\n\n"
+            + "\n\n".join(blocks)
         )
         data = self.client.extract(
             system=_SUBAGENT_SYSTEM, prompt=prompt, schema=_FINDINGS_SCHEMA
@@ -480,8 +488,9 @@ class Orchestrator:
         }
 
     def _candidate_credible_hosts(self, candidate: Candidate) -> int:
-        all_sources = [s for f in candidate.findings for s in f.sources]
-        return count_independent(all_sources)
+        # Credible strength: distinct credible hosts OR best reviewer-corroboration,
+        # so many user reviews on one marketplace satisfy the floor.
+        return candidate_credible_strength(candidate.findings)
 
     def investigate(self, criteria: Criteria, candidate: Candidate) -> None:
         templates = self._augmented_queries(criteria, candidate)
