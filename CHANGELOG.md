@@ -4,6 +4,22 @@ All notable changes to this project are documented here. Dates are ISO 8601.
 
 ## [Unreleased]
 
+### 2026-06-21 — Live-link grounding + verbatim quotes (advice trust fixes)
+
+Operator review found two experiment-failing defects in a live advice run: broken/dead links,
+and claims with no lived-experience quote. Applied change `require-live-links-and-quotes`.
+
+- **Live links** (`links.py`, `config.py`, `orchestrator.py`): every cited URL is probed
+  before use; 404/410/unreachable are dropped, 401/403/429 (bot-blocked but real) are kept; a
+  finding with no live source is dropped ("no LIVE grounding = no claim"). Configurable via
+  `verify_links` / `CRIBLE_VERIFY_LINKS` (default on) and `link_check_timeout`. Dropped links
+  are logged. `httpx` added as a direct dependency.
+- **Verbatim quotes** (`models.py`, `orchestrator.py`, `advice.py`): every finding must carry
+  a short verbatim excerpt from a cited source; it is rendered under the claim so the lived
+  experience is visible, not just asserted. Findings that cannot quote a real source are dropped.
+- Tests: 28 (+4) — dead/unreachable dropped & 403 kept, finding-with-only-dead-links dropped,
+  quote rendered. Ruff clean.
+
 ### 2026-06-21 — Implement retrieval steering + evidence-mix floor
 
 Applied OpenSpec change `steer-retrieval-toward-trusted-sources` (single-threaded; reduces

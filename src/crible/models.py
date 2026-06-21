@@ -51,6 +51,7 @@ class Finding:
     candidate: str
     kind: str  # "failure" | "support"
     claim: str
+    quote: str = ""  # verbatim excerpt of the lived experience from a cited source
     criterion: str = ""  # which requirement/disqualifier this finding addresses
     severity: str = "unknown"  # "disqualifying" | "minor" | "unknown" (failures only)
     sources: list[Source] = field(default_factory=list)

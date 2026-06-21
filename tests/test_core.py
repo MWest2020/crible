@@ -262,7 +262,11 @@ def _support(url: str):
 def _make_orchestrator(monkeypatch, fake, tmp_path):
     from crible.orchestrator import Orchestrator
     monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy-key")
-    cfg = load_config(evidence_mix_floor=2, evidence_research_extra_passes=1)
+    # Disable link probing by default so floor tests don't hit the network;
+    # tests that exercise link-dropping set orch._links explicitly.
+    cfg = load_config(
+        evidence_mix_floor=2, evidence_research_extra_passes=1, verify_links=False
+    )
     cfg.source_tiers_path = TIERS
     orch = Orchestrator(cfg, AuditLog(tmp_path / "run"))
     orch.client = fake  # bypass the real network client
@@ -304,3 +308,93 @@ def test_floor_not_met_emits_caveat_and_advice_surfaces_it(monkeypatch, tmp_path
     assert cand.caveat == "evidence-mix-floor-not-met"
     doc = render(crit, [cand], corroboration_threshold=2)
     assert "evidence-mix-floor-not-met" in doc
+
+
+# ---- link liveness + quotes ----------------------------------------------
+
+class _FakeResp:
+    def __init__(self, status_code):
+        self.status_code = status_code
+
+
+class _FakeHTTP:
+    """Minimal httpx.Client stand-in: status by URL substring."""
+
+    def __init__(self, status_by_substr):
+        self._map = status_by_substr
+
+    def _status(self, url):
+        for sub, code in self._map.items():
+            if sub in url:
+                return code
+        return 200
+
+    def head(self, url):
+        return _FakeResp(self._status(url))
+
+    def get(self, url):
+        return _FakeResp(self._status(url))
+
+    def close(self):
+        pass
+
+
+def test_link_checker_drops_dead_keeps_blocked() -> None:
+    from crible.links import LinkChecker
+    http = _FakeHTTP({"dead": 404, "gone": 410, "blocked": 403})
+    lc = LinkChecker(client=http)
+    assert lc.is_live("https://x.com/dead") is False
+    assert lc.is_live("https://x.com/gone") is False
+    assert lc.is_live("https://x.com/blocked") is True   # 403 = exists, bot-blocked
+    assert lc.is_live("https://x.com/ok") is True
+
+
+def test_link_checker_unreachable_is_dead() -> None:
+    from crible.links import LinkChecker
+
+    class _Boom:
+        def head(self, url):
+            raise RuntimeError("connect error")
+        def get(self, url):
+            raise RuntimeError("connect error")
+        def close(self):
+            pass
+
+    lc = LinkChecker(client=_Boom())
+    assert lc.is_live("https://nope.invalid/x") is False
+
+
+def test_dead_link_finding_is_dropped(monkeypatch, tmp_path) -> None:
+    # A finding whose only source is a dead link must not survive.
+    dead = "https://www.reddit.com/r/coffee/DEAD"
+    fake = _FakeClient(
+        research_results=[_rr(dead), _rr("")],
+        extract_results=[{"findings": [{
+            "kind": "support", "claim": "ok", "quote": "tastes fine", "criterion": "taste",
+            "severity": "unknown", "corroboration_count": 3, "source_urls": [dead],
+            "skepticism_flags": [],
+        }]}],
+    )
+    orch = _make_orchestrator(monkeypatch, fake, tmp_path)
+    orch._links = _DeadAllLinks()  # every link is dead
+    cand = Candidate(name="X")
+    orch.investigate(Criteria(question="q", disqualifiers=["metallic taste"]), cand)
+    assert cand.findings == []  # dropped: no live grounding
+
+
+class _DeadAllLinks:
+    def is_live(self, url):
+        return False
+    def close(self):
+        pass
+
+
+def test_quote_is_rendered_in_advice() -> None:
+    from crible.advice import render
+    src = [Source(url="https://www.reddit.com/r/coffee/1", tier="high")]
+    f = Finding(candidate="A", kind="support", claim="no metallic taste",
+                quote="still no metal taste after a year", criterion="taste",
+                sources=src, corroboration_count=2)
+    cand = Candidate(name="A", findings=[f])
+    doc = render(Criteria(question="q"), [cand], corroboration_threshold=2)
+    assert "still no metal taste after a year" in doc

@@ -94,6 +94,8 @@ def render(criteria: Criteria, ranked: list[Candidate], corroboration_threshold:
         for f in supports:
             crit = f" [{f.criterion}]" if f.criterion else ""
             lines.append(f"- {f.claim}{crit} ({f.corroboration_count} independent sources)")
+            if f.quote:
+                lines.append(f"  > “{f.quote}”")
             lines.extend(_links([f]))
         if cand.caveat:
             lines.append(
@@ -125,6 +127,8 @@ def render(criteria: Criteria, ranked: list[Candidate], corroboration_threshold:
                 f"Avoid, because {f.corroboration_count} independent users report "
                 f"<{f.claim}>{crit} (severity: {f.severity})."
             )
+            if f.quote:
+                lines.append(f"  > “{f.quote}”")
             lines.extend(_links([f]))
         if cand.caveat:
             lines.append(f"> ⚠ Caveat ({cand.caveat}): limited trusted sources.")

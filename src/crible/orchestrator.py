@@ -25,6 +25,7 @@ from . import ranking as ranking_mod
 from . import verify as verify_mod
 from .audit import AuditLog
 from .config import Config
+from .links import LinkChecker
 from .llm import CostCeilingReached, LLMClient
 from .models import Candidate, Criteria, Finding, Source
 from .skepticism import classify_sources, count_independent, evaluate_finding
@@ -61,6 +62,7 @@ _FINDINGS_SCHEMA = {
                 "properties": {
                     "kind": {"type": "string", "enum": ["failure", "support"]},
                     "claim": {"type": "string"},
+                    "quote": {"type": "string"},
                     "criterion": {"type": "string"},
                     "severity": {
                         "type": "string",
@@ -73,6 +75,7 @@ _FINDINGS_SCHEMA = {
                 "required": [
                     "kind",
                     "claim",
+                    "quote",
                     "criterion",
                     "severity",
                     "corroboration_count",
@@ -120,7 +123,11 @@ _SUBAGENT_SYSTEM = (
     "sources, varied phrasing, spread over time); one enthusiastic post is not "
     "evidence. Flag manipulation signals (identical phrasing, very young accounts, "
     "sudden praise clusters). Distinguish 'not found (searched)' from 'confirmed "
-    "absent'. Return condensed findings with the source URLs you actually used."
+    "absent'. Return condensed findings with the source URLs you actually used.\n"
+    "EVERY finding MUST include a 'quote': a SHORT VERBATIM excerpt (the user's own "
+    "words, <=240 chars) from one of the cited sources that shows the lived "
+    "experience behind the claim. Copy it exactly — do not paraphrase or invent. If "
+    "you cannot quote a real source, drop the finding."
 )
 
 
@@ -141,6 +148,9 @@ class Orchestrator:
         else:
             self._allow_domains = []
             self._block_domains = []
+        self._links = LinkChecker(
+            timeout=config.link_check_timeout, enabled=config.verify_links
+        )
 
     # ---- stage 1: criteria ------------------------------------------------
 
@@ -261,16 +271,34 @@ class Orchestrator:
         for raw in data.get("findings", []):
             urls = [u for u in raw.get("source_urls", []) if u in visited_set]
             sources = classify_sources(self.tier_list, [Source(url=u) for u in urls])
+            # Drop dead links — a broken citation is a no-go (no LIVE grounding = no claim).
+            live: list[Source] = []
             for s in sources:
+                if self._links.is_live(s.url):
+                    live.append(s)
+                    self.log.log(
+                        ev.EVENT_CLASSIFICATION, candidate=candidate.name,
+                        url=s.url, tier=s.tier, rule=s.tier_rule,
+                    )
+                else:
+                    self.log.log(
+                        ev.EVENT_NOTE, stage="link-check", candidate=candidate.name,
+                        dropped_url=s.url, reason="dead link (404/410/unreachable)",
+                    )
+            sources = live
+            if not sources:
+                # All citations dead -> the claim is ungrounded; drop it.
                 self.log.log(
-                    ev.EVENT_CLASSIFICATION, candidate=candidate.name,
-                    url=s.url, tier=s.tier, rule=s.tier_rule,
+                    ev.EVENT_NOTE, stage="link-check", candidate=candidate.name,
+                    dropped_claim=raw.get("claim", ""), reason="no live sources",
                 )
+                continue
             reported = int(raw.get("corroboration_count", 0))
             finding = Finding(
                 candidate=candidate.name,
                 kind=raw.get("kind", "support"),
                 claim=raw.get("claim", ""),
+                quote=raw.get("quote", ""),
                 criterion=raw.get("criterion", ""),
                 severity=raw.get("severity", "unknown"),
                 sources=sources,
@@ -409,4 +437,5 @@ class Orchestrator:
             ev.EVENT_COST, stage="final", tokens_used=self.client.tokens_used,
             ceiling=self.config.token_ceiling,
         )
+        self._links.close()
         return criteria, ranked, document

@@ -74,6 +74,12 @@ class Config:
     # Skepticism / ranking.
     corroboration_threshold: int = 2  # >= 2 independent corroborations
 
+    # Link liveness — a cited source MUST resolve, or it is dropped (broken links
+    # are a no-go for the advice). 403/429 (bot-blocked) count as live; only
+    # 404/410/unreachable are treated as dead.
+    verify_links: bool = True
+    link_check_timeout: float = 6.0
+
     # Known blog / affiliate / SEO domains to keep out of search results at the
     # source (an echo chamber that does not count as evidence anyway).
     blocked_search_domains: list[str] = field(
@@ -173,6 +179,10 @@ def load_config(**overrides: Any) -> Config:
         cfg.evidence_mix_floor = int(v)
     if v := env.get("CRIBLE_EVIDENCE_EXTRA_PASSES"):
         cfg.evidence_research_extra_passes = int(v)
+    if v := env.get("CRIBLE_VERIFY_LINKS"):
+        cfg.verify_links = v.strip() in ("1", "true", "yes", "on")
+    if v := env.get("CRIBLE_LINK_TIMEOUT"):
+        cfg.link_check_timeout = float(v)
 
     for key, value in overrides.items():
         if not hasattr(cfg, key):
