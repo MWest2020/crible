@@ -141,7 +141,12 @@ class Orchestrator:
         self.tier_list = TierList.load(config.source_tiers_path)
         # Steering domain lists, derived once from the seed tier list (design D4).
         if config.domain_steering_enabled:
-            self._allow_domains = self.tier_list.allow_domains()
+            # Exclude domains the provider's crawler can't reach (e.g. reddit) —
+            # listing them in allowed_domains 400s the whole request.
+            noncrawlable = set(config.noncrawlable_search_domains)
+            self._allow_domains = [
+                d for d in self.tier_list.allow_domains() if d not in noncrawlable
+            ]
             self._block_domains = sorted(
                 set(self.tier_list.block_domains()) | set(config.blocked_search_domains)
             )
@@ -238,7 +243,7 @@ class Orchestrator:
         self.log.log(
             ev.EVENT_SEARCH_DOMAINS, candidate=candidate.name, pass_=label,
             allowed=research.allowed_domains or [], blocked=research.blocked_domains or [],
-            degraded=research.degraded,
+            degraded=research.degraded, degraded_reason=research.degraded_reason,
         )
         self.log.log(
             ev.EVENT_QUERY_TEMPLATES, candidate=candidate.name, pass_=label, templates=templates
@@ -408,10 +413,35 @@ class Orchestrator:
         candidates: list[Candidate] = []
         try:
             candidates = self.build_landscape(criteria)
-            # Single-threaded by default (parallelism is an explicit opt-in).
+            # Fail-fast budget guard: estimate the per-subagent cost from actuals
+            # (seeded by the landscape cost) and DON'T start a subagent we can't
+            # fund — so a token-heavy model aborts early with guidance instead of
+            # grinding to the ceiling and producing nothing.
+            estimate = max(self.client.tokens_used, 1)  # landscape cost as first proxy
+            done = 0
             for cand in candidates:
-                self.client.check_ceiling()
+                remaining = self.config.token_ceiling - self.client.tokens_used
+                if remaining < estimate:
+                    self.log.log(
+                        ev.EVENT_STOP,
+                        reason="budget_too_low_for_subagent",
+                        detail=(
+                            f"~{estimate} tokens needed per candidate but only {remaining} "
+                            f"left of {self.config.token_ceiling}; model '{self.config.model}' "
+                            f"is too token-heavy for this ceiling. Raise --token-ceiling or use "
+                            f"a cheaper model (e.g. --model claude-haiku-4-5)."
+                        ),
+                        tokens_used=self.client.tokens_used,
+                        candidates_done=done,
+                        candidates_total=len(candidates),
+                    )
+                    break
+                before = self.client.tokens_used
                 self.investigate(criteria, cand)
+                spent = self.client.tokens_used - before
+                if spent > 0:
+                    estimate = spent  # refine from the most recent actual
+                done += 1
         except CostCeilingReached as exc:
             self.log.log(
                 ev.EVENT_STOP,

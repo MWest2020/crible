@@ -62,6 +62,11 @@ class Config:
     domain_steering_enabled: bool = True  # dual-pass allow/block steering
     evidence_mix_floor: int = 2  # min distinct high+medium sources before a clean verdict
     evidence_research_extra_passes: int = 1  # bounded re-search on floor breach (hard cap 1)
+    # Domains Anthropic's web_search user agent CANNOT crawl — listing any of
+    # them in allowed_domains 400s the whole request, so they are kept out of the
+    # high-trust allow-list. (They can still appear in open-pass results; we just
+    # cannot allow-list or server-fetch them. The client-side/local path can.)
+    noncrawlable_search_domains: list[str] = field(default_factory=lambda: ["reddit.com"])
     query_templates: list[str] = field(
         default_factory=lambda: [
             "{candidate} {disqualifier} reddit",

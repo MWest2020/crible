@@ -389,6 +389,14 @@ class _DeadAllLinks:
         pass
 
 
+def test_allow_list_excludes_noncrawlable(monkeypatch, tmp_path) -> None:
+    # reddit.com is blocked from Anthropic's crawler -> must not be allow-listed
+    # (listing it 400s the whole request), but crawlable fora stay.
+    orch = _make_orchestrator(monkeypatch, _FakeClient([], []), tmp_path)
+    assert "reddit.com" not in orch._allow_domains
+    assert "home-barista.com" in orch._allow_domains
+
+
 def test_quote_is_rendered_in_advice() -> None:
     from crible.advice import render
     src = [Source(url="https://www.reddit.com/r/coffee/1", tier="high")]

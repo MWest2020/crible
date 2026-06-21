@@ -4,6 +4,36 @@ All notable changes to this project are documented here. Dates are ISO 8601.
 
 ## [Unreleased]
 
+### 2026-06-21 — Fail-fast budget guard + the reddit-crawl finding
+
+A second Sonnet run died on the token ceiling (324k > 300k) mid-first-subagent, producing
+nothing (~$4 wasted). A cheap probe then established the root finding:
+
+- **Anthropic's web_search user agent cannot crawl reddit.com** — listing it (or any
+  crawler-blocked domain) in `allowed_domains` returns a 400 and degrades the whole run to
+  unsteered search. Strategic implication: the product's core "reddit desire-path" is
+  unreachable via Anthropic's server tools (search returns reddit URLs from its index, but it
+  cannot allow-list or `web_fetch` reddit). This validates the client-side/local-fetch
+  direction — our own host *can* reach reddit.
+
+Fixes (fail-fast, no new paid runs):
+- **Exclude non-crawlable domains from the allow-list** (`noncrawlable_search_domains`,
+  default `["reddit.com"]`) so domain steering actually applies for crawlable fora instead of
+  400-degrading the whole run.
+- **Fail-fast budget guard** (`orchestrator.run`): estimate per-subagent cost from actuals
+  (seeded by the landscape cost) and do NOT start a subagent the remaining budget can't fund —
+  abort early with an actionable message ("model too token-heavy for this ceiling; raise
+  --token-ceiling or use claude-haiku-4-5") instead of grinding to the ceiling for nothing.
+- **Log the degradation reason** (`degraded_reason`) on `search_domains` so future steering
+  rejections are diagnosable from the trail.
+- Tests: 29 (+1, allow-list excludes reddit, keeps home-barista). Ruff clean.
+
+Note: domain steering still only *applies* on the modern `web_search_20260209` tool
+(Opus/Sonnet); Haiku's basic tool rejects domain params entirely. Combined with Sonnet's
+prohibitive per-call cost, the practical path to a quality result remains Haiku + query
+augmentation + evidence-mix floor + live-links + quotes, with the durable win being
+client-side/local fetch (specs `support-local-sovereign-models`, `ground-evidence-in-fetched-content`).
+
 ### 2026-06-21 — Live-link grounding + verbatim quotes (advice trust fixes)
 
 Operator review found two experiment-failing defects in a live advice run: broken/dead links,

@@ -40,6 +40,7 @@ class ResearchResult:
     allowed_domains: list[str] | None = None  # steering applied this pass
     blocked_domains: list[str] | None = None
     degraded: bool = False  # provider rejected domain steering -> ran unsteered
+    degraded_reason: str = ""  # the rejection message (diagnostics)
 
 
 class LLMClient:
@@ -116,6 +117,7 @@ class LLMClient:
         queries: list[str] = []
         text_parts: list[str] = []
         degraded = False
+        degraded_reason = ""
 
         for _ in range(self.config.max_iterations_per_thread):
             tool = self._web_search_tool(allowed_domains, blocked_domains)
@@ -138,6 +140,7 @@ class LLMClient:
                     # Degrade gracefully: disable steering for the rest of the run.
                     self._steering_supported = False
                     degraded = True
+                    degraded_reason = str(exc)[:300]
                     continue
                 raise
             self._collect(resp, sources, queries, text_parts)
@@ -159,6 +162,7 @@ class LLMClient:
             allowed_domains=allowed_domains if applied else None,
             blocked_domains=blocked_domains if applied else None,
             degraded=degraded or not self._steering_supported,
+            degraded_reason=degraded_reason,
         )
 
     def extract(self, system: str, prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
