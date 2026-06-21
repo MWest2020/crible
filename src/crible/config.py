@@ -52,8 +52,8 @@ class Config:
     # Orchestration.
     parallelism_enabled: bool = False  # default OFF — explicit opt-in only
     max_subagents: int = 8
-    max_iterations_per_thread: int = 6  # bounded tool-use loop per thread
-    max_search_uses_per_thread: int = 5  # web_search max_uses cap
+    max_iterations_per_thread: int = 3  # bounded tool-use loop per thread
+    max_search_uses_per_thread: int = 3  # web_search max_uses cap (token-heavy)
 
     # Skepticism / ranking.
     corroboration_threshold: int = 2  # >= 2 independent corroborations

@@ -184,16 +184,25 @@ class Orchestrator:
                 ev.EVENT_SOURCE_VISITED, candidate=candidate.name, url=src.url, title=src.title
             )
 
+        # Ground the extraction: give the model the exact URLs it actually
+        # visited and constrain findings to them, so claims cite real sources
+        # (no grounding = no claim — the model cannot recall URLs reliably).
+        visited = list(dict.fromkeys(s.url for s in research.sources))
+        visited_set = set(visited)
+        visited_block = "\n".join(visited) if visited else "(no sources were retrieved)"
         data = self.client.extract(
             system=_SUBAGENT_SYSTEM,
             prompt=(
-                f"From this investigation of {candidate.name}, return the findings. "
-                f"Only cite URLs that appear in the research:\n\n{research.text}"
+                f"From this investigation of {candidate.name}, return the findings.\n\n"
+                f"Sources you actually visited (cite source_urls ONLY from this list, "
+                f"verbatim):\n{visited_block}\n\nResearch notes:\n{research.text}"
             ),
             schema=_FINDINGS_SCHEMA,
         )
         for raw in data.get("findings", []):
-            sources = [Source(url=u) for u in raw.get("source_urls", [])]
+            # Drop any URL the model invented that was not actually visited.
+            urls = [u for u in raw.get("source_urls", []) if u in visited_set]
+            sources = [Source(url=u) for u in urls]
             sources = classify_sources(self.tier_list, sources)
             for s in sources:
                 self.log.log(
