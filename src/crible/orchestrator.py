@@ -263,10 +263,102 @@ class Orchestrator:
             )
         return research
 
-    def _extract_findings(
-        self, criteria: Criteria, candidate: Candidate, text: str, visited: list[str]
-    ) -> None:
-        """Extract findings grounded ONLY in the visited URLs; classify + evaluate."""
+    _FETCH_RANK = {"high": 0, "medium": 1, "unknown": 2, "low": 3}
+
+    def _ingest(self, criteria, candidate, sources, search_text):
+        """Turn search results into grounded findings.
+
+        Fetch ON (default): pre-fetch the cited pages (shops, reviews, fora) and
+        extract findings FROM the real page text, quoting verbatim — so user
+        experiences on shop sites and forum threads survive verification instead of
+        being dropped. Fetch OFF: extract from the search prose, ground by link-liveness.
+        """
+        if self.config.fetch_enabled:
+            pages = self._fetch_pages(candidate, sources)
+            self._extract_from_pages(criteria, candidate, pages)
+        else:
+            visited = list(dict.fromkeys(s.url for s in sources))
+            self._extract_findings(criteria, candidate, search_text, visited)
+
+    def _fetch_pages(self, candidate, sources):
+        """Fetch top cited pages (credible first, but include shops/reviews).
+
+        Returns [(Source, full_text)]; a page that won't fetch is dropped as dead.
+        """
+        uniq, seen = [], set()
+        for s in classify_sources(self.tier_list, sources):
+            if s.url not in seen:
+                seen.add(s.url)
+                uniq.append(s)
+        uniq.sort(key=lambda s: self._FETCH_RANK.get(s.tier, 2))
+        pages = []
+        for s in uniq[: self.config.max_fetch_pages_per_finding]:
+            text = self._fetcher.fetch(s.url)
+            self.log.log(
+                ev.EVENT_FETCH, candidate=candidate.name, url=s.url,
+                tier=s.tier, ok=bool(text), chars=len(text or ""),
+            )
+            if text:
+                pages.append((s, text))
+            else:
+                self.log.log(
+                    ev.EVENT_NOTE, stage="fetch", candidate=candidate.name,
+                    dropped_url=s.url, reason="dead/unfetchable",
+                )
+        return pages
+
+    def _extract_from_pages(self, criteria, candidate, pages):
+        """Extract findings FROM fetched page text; the quote must be verbatim from it."""
+        if not pages:
+            return
+        text_by_url = {s.url: text for s, text in pages}
+        blocks = [
+            f"[SOURCE {i}] {s.url} (trust: {s.tier})\n{text[: self.config.fetch_prompt_chars]}"
+            for i, (s, text) in enumerate(pages, 1)
+        ]
+        prompt = (
+            f"Investigate {candidate.name} against the user's criteria using ONLY the "
+            f"source texts below.\nRequirements: {criteria.positive}\n"
+            f"Disqualifiers to hunt: {criteria.disqualifiers}\n\n"
+            "Prefer real USER EXPERIENCES (reviews, forum posts) over marketing copy. "
+            "For each finding, 'quote' MUST be copied VERBATIM from the text of the source "
+            "you cite, and 'source_urls' MUST contain that source's URL exactly. Use only "
+            "the sources listed below.\n\n" + "\n\n".join(blocks)
+        )
+        data = self.client.extract(
+            system=_SUBAGENT_SYSTEM, prompt=prompt, schema=_FINDINGS_SCHEMA
+        )
+        for raw in data.get("findings", []):
+            urls = [u for u in raw.get("source_urls", []) if u in text_by_url]
+            quote, claim = raw.get("quote", ""), raw.get("claim", "")
+            if not urls:
+                self.log.log(
+                    ev.EVENT_NOTE, stage="extract", candidate=candidate.name,
+                    dropped_claim=claim, reason="cited a source not in the provided list",
+                )
+                continue
+            matched, best = False, 0.0
+            for u in urls:
+                ok, score = quote_matches(quote, text_by_url[u], self.config.quote_match_ratio)
+                best = max(best, score)
+                if ok:
+                    matched = True
+                    break
+            self.log.log(
+                ev.EVENT_QUOTE_CHECK, candidate=candidate.name, claim=claim,
+                matched=matched, score=round(best, 2), ratio=self.config.quote_match_ratio,
+            )
+            if not matched:
+                self.log.log(
+                    ev.EVENT_NOTE, stage="quote-check", candidate=candidate.name,
+                    dropped_claim=claim, reason="quote not in cited page text",
+                )
+                continue
+            sources = classify_sources(self.tier_list, [Source(url=u) for u in urls])
+            self._record_finding(candidate, raw, sources)
+
+    def _extract_findings(self, criteria, candidate, text, visited):
+        """No-fetch fallback: extract from search prose; ground via link-liveness."""
         if not text.strip():
             return
         visited_set = set(visited)
@@ -283,84 +375,19 @@ class Orchestrator:
         for raw in data.get("findings", []):
             urls = [u for u in raw.get("source_urls", []) if u in visited_set]
             sources = classify_sources(self.tier_list, [Source(url=u) for u in urls])
-            quote = raw.get("quote", "")
-            claim = raw.get("claim", "")
-            # Ground the finding: keep only live sources, and (when fetching) verify
-            # the quote is actually on the fetched page. No live, grounded quote =
-            # no claim.
-            sources = self._ground_finding(candidate, sources, quote, claim)
-            if sources is None:
+            live = self._live_sources(candidate, sources, raw.get("claim", ""))
+            if live is None:
                 continue
-            for s in sources:
-                self.log.log(
-                    ev.EVENT_CLASSIFICATION, candidate=candidate.name,
-                    url=s.url, tier=s.tier, rule=s.tier_rule,
-                )
-            reported = int(raw.get("corroboration_count", 0))
-            finding = Finding(
-                candidate=candidate.name,
-                kind=raw.get("kind", "support"),
-                claim=claim,
-                quote=quote,
-                criterion=raw.get("criterion", ""),
-                severity=raw.get("severity", "unknown"),
-                sources=sources,
-                corroboration_count=reported,
-                skepticism_flags=list(raw.get("skepticism_flags", [])),
-            )
-            for rule in evaluate_finding(finding, self.config.corroboration_threshold):
-                self.log.log(
-                    ev.EVENT_SKEPTICISM_RULE, candidate=candidate.name,
-                    rule=rule, claim=finding.claim,
-                )
-            self.log.log(
-                ev.EVENT_CORROBORATION, candidate=candidate.name, claim=finding.claim,
-                reported_count=reported, credible_count=finding.corroboration_count,
-            )
-            self.log.log(ev.EVENT_SOURCE_TIER_MIX, candidate=candidate.name, claim=finding.claim,
-                         **self._tier_mix(finding))
-            self.log.log(ev.EVENT_FINDING, **finding.to_dict())
-            candidate.findings.append(finding)
+            self._record_finding(candidate, raw, live)
 
-    def _ground_finding(self, candidate, sources, quote, claim):
-        """Return live, quote-grounded sources, or None if the finding must drop.
-
-        With fetching on: fetch each cited page (our host reaches sources Anthropic
-        can't); drop dead pages; require the quote to verify against fetched text.
-        With fetching off: fall back to link-liveness only (no quote verification).
-        """
-        if not self.config.fetch_enabled:
-            live = []
-            for s in sources:
-                if self._links.is_live(s.url):
-                    live.append(s)
-                else:
-                    self.log.log(
-                        ev.EVENT_NOTE, stage="link-check", candidate=candidate.name,
-                        dropped_url=s.url, reason="dead link (404/410/unreachable)",
-                    )
-            if not live:
+    def _live_sources(self, candidate, sources, claim):
+        """Link-liveness filter (no-fetch path); returns None if nothing is live."""
+        live = [s for s in sources if self._links.is_live(s.url)]
+        for s in sources:
+            if s not in live:
                 self.log.log(
                     ev.EVENT_NOTE, stage="link-check", candidate=candidate.name,
-                    dropped_claim=claim, reason="no live sources",
-                )
-                return None
-            return live
-
-        live, page_texts = [], []
-        for s in sources[: self.config.max_fetch_pages_per_finding]:
-            text = self._fetcher.fetch(s.url)
-            self.log.log(
-                ev.EVENT_FETCH, candidate=candidate.name, url=s.url,
-                ok=bool(text), chars=len(text or ""),
-            )
-            if text:
-                live.append(s)
-                page_texts.append(text)
-            else:
-                self.log.log(
-                    ev.EVENT_NOTE, stage="link-check", candidate=candidate.name,
-                    dropped_url=s.url, reason="dead/unfetchable",
+                    dropped_url=s.url, reason="dead link (404/410/unreachable)",
                 )
         if not live:
             self.log.log(
@@ -368,25 +395,42 @@ class Orchestrator:
                 dropped_claim=claim, reason="no live sources",
             )
             return None
-        # Verify the quote is actually on one of the fetched pages.
-        matched, best = False, 0.0
-        for text in page_texts:
-            ok, score = quote_matches(quote, text, self.config.quote_match_ratio)
-            best = max(best, score)
-            if ok:
-                matched = True
-                break
-        self.log.log(
-            ev.EVENT_QUOTE_CHECK, candidate=candidate.name, claim=claim,
-            matched=matched, score=round(best, 2), ratio=self.config.quote_match_ratio,
-        )
-        if not matched:
-            self.log.log(
-                ev.EVENT_NOTE, stage="quote-check", candidate=candidate.name,
-                dropped_claim=claim, reason="quote not grounded in fetched page text",
-            )
-            return None
         return live
+
+    def _record_finding(self, candidate, raw, sources):
+        """Build, classify-log, evaluate and record a finding from raw + live sources."""
+        for s in sources:
+            self.log.log(
+                ev.EVENT_CLASSIFICATION, candidate=candidate.name,
+                url=s.url, tier=s.tier, rule=s.tier_rule,
+            )
+        reported = int(raw.get("corroboration_count", 0))
+        finding = Finding(
+            candidate=candidate.name,
+            kind=raw.get("kind", "support"),
+            claim=raw.get("claim", ""),
+            quote=raw.get("quote", ""),
+            criterion=raw.get("criterion", ""),
+            severity=raw.get("severity", "unknown"),
+            sources=sources,
+            corroboration_count=reported,
+            skepticism_flags=list(raw.get("skepticism_flags", [])),
+        )
+        for rule in evaluate_finding(finding, self.config.corroboration_threshold):
+            self.log.log(
+                ev.EVENT_SKEPTICISM_RULE, candidate=candidate.name,
+                rule=rule, claim=finding.claim,
+            )
+        self.log.log(
+            ev.EVENT_CORROBORATION, candidate=candidate.name, claim=finding.claim,
+            reported_count=reported, credible_count=finding.corroboration_count,
+        )
+        self.log.log(
+            ev.EVENT_SOURCE_TIER_MIX, candidate=candidate.name, claim=finding.claim,
+            **self._tier_mix(finding),
+        )
+        self.log.log(ev.EVENT_FINDING, **finding.to_dict())
+        candidate.findings.append(finding)
 
     def _tier_mix(self, finding: Finding) -> dict:
         counts = {"high": 0, "medium": 0, "low": 0, "unknown": 0}
@@ -428,8 +472,7 @@ class Orchestrator:
             if research.text:
                 text_parts.append(research.text)
 
-        visited = list(dict.fromkeys(s.url for s in merged_sources))
-        self._extract_findings(criteria, candidate, "\n".join(text_parts), visited)
+        self._ingest(criteria, candidate, merged_sources, "\n".join(text_parts))
 
         # Evidence-mix floor: bounded one-shot high-trust re-search on breach.
         before = self._candidate_credible_hosts(candidate)
@@ -443,8 +486,7 @@ class Orchestrator:
                 candidate, base + "\nFocus ONLY on specialist forums and user reviews.",
                 "high-trust-research", templates, allowed_domains=self._allow_domains or None,
             )
-            visited2 = list(dict.fromkeys(s.url for s in research.sources))
-            self._extract_findings(criteria, candidate, research.text, visited2)
+            self._ingest(criteria, candidate, research.sources, research.text)
             after = self._candidate_credible_hosts(candidate)
             self.log.log(
                 ev.EVENT_FLOOR_CHECK, candidate=candidate.name, stage="after-research",

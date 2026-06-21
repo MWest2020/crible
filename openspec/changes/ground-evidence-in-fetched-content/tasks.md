@@ -11,8 +11,9 @@
 ## 2. Quote verification
 
 - [x] 2.1 Quote-matching util: normalise + exact-substring OR token-overlap ≥ ratio (`fetch.py`)
-- [ ] 2.2 Feed fetched page text INTO extraction — PARTIAL: we verify the model's quote against
-      fetched text post-hoc (drops unverifiable); pre-fetch-then-extract is a future refinement
+- [x] 2.2 Feed fetched page text INTO extraction — pre-fetch the cited pages (shops + fora),
+      hand the model the real page text, quote verbatim from it (so forum/shop-review quotes
+      survive verification instead of being dropped). Replaces post-hoc verification.
 - [x] 2.3 Verify each finding's quote against its cited fetched pages; drop unverifiable
       findings; subsume link-liveness for fetched sources (`_ground_finding`)
 

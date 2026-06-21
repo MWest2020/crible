@@ -94,8 +94,9 @@ class Config:
     # sources Anthropic's crawler can't, e.g. reddit) and verify the quote is
     # actually on the page. Subsumes link-liveness when enabled.
     fetch_enabled: bool = True
-    max_fetch_pages_per_finding: int = 6
-    max_fetch_chars: int = 20_000
+    max_fetch_pages_per_finding: int = 6  # max pages fetched per candidate (pre-fetch)
+    max_fetch_chars: int = 20_000  # cap on stored page text (used for verification)
+    fetch_prompt_chars: int = 3_500  # per-page excerpt fed to the extraction model
     quote_match_ratio: float = 0.8
 
     # Known blog / affiliate / SEO domains to keep out of search results at the

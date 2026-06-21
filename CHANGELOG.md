@@ -4,6 +4,23 @@ All notable changes to this project are documented here. Dates are ISO 8601.
 
 ## [Unreleased]
 
+### 2026-06-21 — Pre-fetch → extract (fixes the low-trust quote bias)
+
+A live run showed post-hoc quote verification was perverse: clean marketing/shop pages matched
+the model's remembered snippet, but messy forum threads didn't, so forum/user-experience
+findings were dropped and marketing survived. Fixed by reordering:
+
+- **Pre-fetch then extract** (`_ingest` / `_fetch_pages` / `_extract_from_pages`): discover
+  URLs via search, fetch the top cited pages (credible first, but shops + reviews + fora
+  included), hand the model the REAL page text, and require the quote to be copied verbatim
+  from it. Forum and shop-review quotes now survive verification instead of being dropped.
+  Blogs/shops are fetched and used as context too — combined WITH lived experience, not
+  discarded; if user-experience proof is found it lifts trust, if not the candidate is shown
+  as insufficiently-evidenced.
+- Refactored extraction into `_record_finding` (shared) + `_live_sources` (no-fetch
+  link-liveness fallback). New config `fetch_prompt_chars` (per-page excerpt to the model).
+- Tests: 33 passing (the fetch-path tests now exercise pre-fetch→extract). Ruff clean.
+
 ### 2026-06-21 — Content grounding: client fetch + verified quotes + forum discovery
 
 Applied change `ground-evidence-in-fetched-content` (the unlock: Anthropic's crawler can't
