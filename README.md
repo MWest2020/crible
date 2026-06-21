@@ -96,6 +96,20 @@ Python (managed with `uv`, never `pip` directly). Anthropic Messages API + `web_
 agentic tool-use loop; model/provider configurable (sovereign/cloud split); keys via config,
 never hardcoded. Per-run JSONL audit trail.
 
+## Roadmap
+
+- **Local / sovereign models** (planned — see
+  [`openspec/changes/support-local-sovereign-models/`](openspec/changes/support-local-sovereign-models/)).
+  Today Crible runs only on the Anthropic API with its server-side `web_search`. We want to
+  run fully local/sovereign models (Ollama / vLLM, OpenAI-compatible) with a **client-side**
+  search backend (e.g. self-hosted SearXNG), so a run can stay entirely on your own
+  infrastructure. This needs a provider abstraction plus a pluggable client-side search tool.
+- **Verify domain steering on a dynamic-filtering model** — `allowed_domains`/`blocked_domains`
+  apply on `web_search_20260209` (Opus/Sonnet); Haiku's basic search rejects them and degrades.
+- **Parallel subagents** behind the default-OFF switch (`add-bias-correcting-research-agent`
+  tasks 13.x), run-wide query dedup (3.4), and interactive disqualifier ask-back (4.2).
+- **A true per-call cost cap** — the token ceiling is currently a between-call gate.
+
 ## License
 
 [EUPL-1.2](LICENSE).
