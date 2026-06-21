@@ -25,6 +25,7 @@ from . import ranking as ranking_mod
 from . import verify as verify_mod
 from .audit import AuditLog
 from .config import Config
+from .fetch import ContentFetcher, quote_matches
 from .links import LinkChecker
 from .llm import CostCeilingReached, LLMClient
 from .models import Candidate, Criteria, Finding, Source
@@ -115,8 +116,10 @@ _SUBAGENT_SYSTEM = (
     "copied ten times — they will be discarded. Spend your searches on real user "
     "reviews and forum threads: query marketplace review pages (e.g. "
     "'<candidate> amazon reviews', the '.../product-reviews/...' page), and "
-    "communities ('<candidate> <disqualifier> reddit', '<candidate> <disqualifier> "
-    "forum', 'site:reddit.com <candidate> <disqualifier>'). Only cite a finding if "
+    "communities. Find the TOPIC'S OWN specialist community (e.g. a coffee or gear "
+    "forum) — do not default to reddit alone; reddit is one option among the topic's "
+    "real communities. Try 'best <topic> forum', '<candidate> <disqualifier> forum', "
+    "'<candidate> <disqualifier> reddit'. Only cite a finding if "
     "you found it in user reviews or fora; do not cite manufacturer pages, "
     "top-10 lists or SEO blogs as your evidence.\n"
     "Trust no single source: count INDEPENDENT corroborations (distinct accounts/"
@@ -155,6 +158,9 @@ class Orchestrator:
             self._block_domains = []
         self._links = LinkChecker(
             timeout=config.link_check_timeout, enabled=config.verify_links
+        )
+        self._fetcher = ContentFetcher(
+            max_chars=config.max_fetch_chars, enabled=config.fetch_enabled
         )
 
     # ---- stage 1: criteria ------------------------------------------------
@@ -216,8 +222,9 @@ class Orchestrator:
             if criteria.disqualifiers
             else (criteria.positive[0] if criteria.positive else "review")
         )
+        topic = criteria.topic or criteria.question
         queries = [
-            t.format(candidate=candidate.name, disqualifier=disq)
+            t.format(candidate=candidate.name, disqualifier=disq, topic=topic)
             for t in self.config.query_templates
         ]
         # site: queries for the first couple of listed specialist fora (steering hint).
@@ -276,34 +283,25 @@ class Orchestrator:
         for raw in data.get("findings", []):
             urls = [u for u in raw.get("source_urls", []) if u in visited_set]
             sources = classify_sources(self.tier_list, [Source(url=u) for u in urls])
-            # Drop dead links — a broken citation is a no-go (no LIVE grounding = no claim).
-            live: list[Source] = []
-            for s in sources:
-                if self._links.is_live(s.url):
-                    live.append(s)
-                    self.log.log(
-                        ev.EVENT_CLASSIFICATION, candidate=candidate.name,
-                        url=s.url, tier=s.tier, rule=s.tier_rule,
-                    )
-                else:
-                    self.log.log(
-                        ev.EVENT_NOTE, stage="link-check", candidate=candidate.name,
-                        dropped_url=s.url, reason="dead link (404/410/unreachable)",
-                    )
-            sources = live
-            if not sources:
-                # All citations dead -> the claim is ungrounded; drop it.
-                self.log.log(
-                    ev.EVENT_NOTE, stage="link-check", candidate=candidate.name,
-                    dropped_claim=raw.get("claim", ""), reason="no live sources",
-                )
+            quote = raw.get("quote", "")
+            claim = raw.get("claim", "")
+            # Ground the finding: keep only live sources, and (when fetching) verify
+            # the quote is actually on the fetched page. No live, grounded quote =
+            # no claim.
+            sources = self._ground_finding(candidate, sources, quote, claim)
+            if sources is None:
                 continue
+            for s in sources:
+                self.log.log(
+                    ev.EVENT_CLASSIFICATION, candidate=candidate.name,
+                    url=s.url, tier=s.tier, rule=s.tier_rule,
+                )
             reported = int(raw.get("corroboration_count", 0))
             finding = Finding(
                 candidate=candidate.name,
                 kind=raw.get("kind", "support"),
-                claim=raw.get("claim", ""),
-                quote=raw.get("quote", ""),
+                claim=claim,
+                quote=quote,
                 criterion=raw.get("criterion", ""),
                 severity=raw.get("severity", "unknown"),
                 sources=sources,
@@ -323,6 +321,72 @@ class Orchestrator:
                          **self._tier_mix(finding))
             self.log.log(ev.EVENT_FINDING, **finding.to_dict())
             candidate.findings.append(finding)
+
+    def _ground_finding(self, candidate, sources, quote, claim):
+        """Return live, quote-grounded sources, or None if the finding must drop.
+
+        With fetching on: fetch each cited page (our host reaches sources Anthropic
+        can't); drop dead pages; require the quote to verify against fetched text.
+        With fetching off: fall back to link-liveness only (no quote verification).
+        """
+        if not self.config.fetch_enabled:
+            live = []
+            for s in sources:
+                if self._links.is_live(s.url):
+                    live.append(s)
+                else:
+                    self.log.log(
+                        ev.EVENT_NOTE, stage="link-check", candidate=candidate.name,
+                        dropped_url=s.url, reason="dead link (404/410/unreachable)",
+                    )
+            if not live:
+                self.log.log(
+                    ev.EVENT_NOTE, stage="link-check", candidate=candidate.name,
+                    dropped_claim=claim, reason="no live sources",
+                )
+                return None
+            return live
+
+        live, page_texts = [], []
+        for s in sources[: self.config.max_fetch_pages_per_finding]:
+            text = self._fetcher.fetch(s.url)
+            self.log.log(
+                ev.EVENT_FETCH, candidate=candidate.name, url=s.url,
+                ok=bool(text), chars=len(text or ""),
+            )
+            if text:
+                live.append(s)
+                page_texts.append(text)
+            else:
+                self.log.log(
+                    ev.EVENT_NOTE, stage="link-check", candidate=candidate.name,
+                    dropped_url=s.url, reason="dead/unfetchable",
+                )
+        if not live:
+            self.log.log(
+                ev.EVENT_NOTE, stage="link-check", candidate=candidate.name,
+                dropped_claim=claim, reason="no live sources",
+            )
+            return None
+        # Verify the quote is actually on one of the fetched pages.
+        matched, best = False, 0.0
+        for text in page_texts:
+            ok, score = quote_matches(quote, text, self.config.quote_match_ratio)
+            best = max(best, score)
+            if ok:
+                matched = True
+                break
+        self.log.log(
+            ev.EVENT_QUOTE_CHECK, candidate=candidate.name, claim=claim,
+            matched=matched, score=round(best, 2), ratio=self.config.quote_match_ratio,
+        )
+        if not matched:
+            self.log.log(
+                ev.EVENT_NOTE, stage="quote-check", candidate=candidate.name,
+                dropped_claim=claim, reason="quote not grounded in fetched page text",
+            )
+            return None
+        return live
 
     def _tier_mix(self, finding: Finding) -> dict:
         counts = {"high": 0, "medium": 0, "low": 0, "unknown": 0}
@@ -468,4 +532,5 @@ class Orchestrator:
             ceiling=self.config.token_ceiling,
         )
         self._links.close()
+        self._fetcher.close()
         return criteria, ranked, document

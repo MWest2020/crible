@@ -67,10 +67,15 @@ class Config:
     # high-trust allow-list. (They can still appear in open-pass results; we just
     # cannot allow-list or server-fetch them. The client-side/local path can.)
     noncrawlable_search_domains: list[str] = field(default_factory=lambda: ["reddit.com"])
+    # Augmentation templates. {topic} steers toward the topic's OWN specialist
+    # community (not a reddit-only default); {candidate}/{disqualifier} hunt the
+    # specific failure mode in lived experience.
     query_templates: list[str] = field(
         default_factory=lambda: [
-            "{candidate} {disqualifier} reddit",
+            "best {topic} forum OR community",
+            "{topic} enthusiast forum recommendations",
             "{candidate} {disqualifier} forum",
+            "{candidate} {disqualifier} reddit",
             "{candidate} {disqualifier} review",
             "{candidate} long-term review experience",
         ]
@@ -84,6 +89,14 @@ class Config:
     # 404/410/unreachable are treated as dead.
     verify_links: bool = True
     link_check_timeout: float = 6.0
+
+    # Content grounding — fetch the cited page ourselves (our host can reach
+    # sources Anthropic's crawler can't, e.g. reddit) and verify the quote is
+    # actually on the page. Subsumes link-liveness when enabled.
+    fetch_enabled: bool = True
+    max_fetch_pages_per_finding: int = 6
+    max_fetch_chars: int = 20_000
+    quote_match_ratio: float = 0.8
 
     # Known blog / affiliate / SEO domains to keep out of search results at the
     # source (an echo chamber that does not count as evidence anyway).
@@ -188,6 +201,10 @@ def load_config(**overrides: Any) -> Config:
         cfg.verify_links = v.strip() in ("1", "true", "yes", "on")
     if v := env.get("CRIBLE_LINK_TIMEOUT"):
         cfg.link_check_timeout = float(v)
+    if v := env.get("CRIBLE_FETCH"):
+        cfg.fetch_enabled = v.strip() in ("1", "true", "yes", "on")
+    if v := env.get("CRIBLE_QUOTE_MATCH_RATIO"):
+        cfg.quote_match_ratio = float(v)
 
     for key, value in overrides.items():
         if not hasattr(cfg, key):

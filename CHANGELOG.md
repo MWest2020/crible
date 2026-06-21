@@ -4,6 +4,30 @@ All notable changes to this project are documented here. Dates are ISO 8601.
 
 ## [Unreleased]
 
+### 2026-06-21 — Content grounding: client fetch + verified quotes + forum discovery
+
+Applied change `ground-evidence-in-fetched-content` (the unlock: Anthropic's crawler can't
+read reddit, our host can).
+
+- **Client-side fetch** (`fetch.py` `ContentFetcher`): fetch each cited page ourselves
+  (`httpx`), extract text (script/style stripped), cache per run, cap size. A page that won't
+  fetch is dead — subsumes link-liveness when fetching is on.
+- **Quote verification** (`quote_matches`): a finding's quote must be grounded in the fetched
+  page text (normalised exact-substring OR token-overlap ≥ ratio, default 0.8); unverifiable
+  quotes are dropped. This closes the "is the quote actually on the page?" trust gap.
+- **Config/CLI**: `fetch_enabled` (default on), `max_fetch_pages_per_finding`,
+  `max_fetch_chars`, `quote_match_ratio`; `--no-fetch`, `--quote-match-ratio`, `CRIBLE_FETCH`,
+  `CRIBLE_QUOTE_MATCH_RATIO`. New audit events `fetch` + `quote_check`.
+- **Forum discovery** (operator request): query augmentation now hunts the topic's OWN
+  specialist community (`best <topic> forum`, `<topic> enthusiast forum`) rather than
+  defaulting to reddit; added a `topic` field to criteria extraction. Reddit is now one signal
+  among the topic's real communities.
+- Tests: 33 (+4) — quote-match (substring/overlap/short/fabricated), fetcher dead+extract+cache,
+  unverifiable-quote dropped, grounded-quote kept. Ruff clean; `validate --strict` passes.
+
+Deferred (noted in tasks): server-side `web_fetch` on Anthropic (can't read reddit anyway);
+pre-fetch-then-extract (we verify post-hoc today).
+
 ### 2026-06-21 — Fail-fast budget guard + the reddit-crawl finding
 
 A second Sonnet run died on the token ceiling (324k > 300k) mid-first-subagent, producing

@@ -20,6 +20,7 @@ from .models import Criteria
 _SCHEMA = {
     "type": "object",
     "properties": {
+        "topic": {"type": "string"},
         "positive": {"type": "array", "items": {"type": "string"}},
         "disqualifiers": {"type": "array", "items": {"type": "string"}},
         "budget": {"type": ["string", "null"]},
@@ -27,6 +28,7 @@ _SCHEMA = {
         "missing_disqualifier_question": {"type": ["string", "null"]},
     },
     "required": [
+        "topic",
         "positive",
         "disqualifiers",
         "budget",
@@ -43,7 +45,9 @@ _SYSTEM = (
     "Mainstream rankings ignore disqualifiers; you must not. If the product "
     "category has a well-known failure mode the user did not mention, set "
     "missing_disqualifier_question to a single clarifying question; otherwise null. "
-    "Scale effort to the question: do not invent requirements for a trivial ask."
+    "Scale effort to the question: do not invent requirements for a trivial ask. "
+    "Also set 'topic' to a short product-category phrase (e.g. 'travel coffee mug', "
+    "'mechanical keyboard') used to find the topic's specialist community/forum."
 )
 
 
@@ -56,6 +60,7 @@ def extract_criteria(client: LLMClient, question: str) -> Criteria:
     )
     return Criteria(
         question=question,
+        topic=data.get("topic") or "",
         positive=list(data.get("positive") or []),
         disqualifiers=list(data.get("disqualifiers") or []),
         budget=data.get("budget"),

@@ -265,7 +265,8 @@ def _make_orchestrator(monkeypatch, fake, tmp_path):
     # Disable link probing by default so floor tests don't hit the network;
     # tests that exercise link-dropping set orch._links explicitly.
     cfg = load_config(
-        evidence_mix_floor=2, evidence_research_extra_passes=1, verify_links=False
+        evidence_mix_floor=2, evidence_research_extra_passes=1,
+        verify_links=False, fetch_enabled=False,
     )
     cfg.source_tiers_path = TIERS
     orch = Orchestrator(cfg, AuditLog(tmp_path / "run"))
@@ -395,6 +396,97 @@ def test_allow_list_excludes_noncrawlable(monkeypatch, tmp_path) -> None:
     orch = _make_orchestrator(monkeypatch, _FakeClient([], []), tmp_path)
     assert "reddit.com" not in orch._allow_domains
     assert "home-barista.com" in orch._allow_domains
+
+
+def test_quote_matches_substring_and_overlap() -> None:
+    from crible.fetch import quote_matches
+    page = "Lots of text. I couldn't detect any metallic taste after a year of use. More."
+    # exact (normalised) substring
+    ok, score = quote_matches("I couldn't detect any metallic taste", page, 0.8)
+    assert ok and score == 1.0
+    # token-overlap above ratio (reordered/extra words)
+    ok, score = quote_matches("metallic taste detect couldn't any after", page, 0.8)
+    assert ok and score >= 0.8
+    # fabricated quote -> no match
+    ok, score = quote_matches("this thermos exploded and caught fire instantly", page, 0.8)
+    assert not ok
+    # very short quote requires substring
+    assert quote_matches("metallic zzz", page, 0.8) == (False, 0.0)
+
+
+def test_content_fetcher_dead_and_extract() -> None:
+    from crible.fetch import ContentFetcher
+
+    class _Resp:
+        def __init__(self, code, text=""):
+            self.status_code = code
+            self.text = text
+
+    class _HTTP:
+        def __init__(self):
+            self.calls = 0
+        def get(self, url):
+            self.calls += 1
+            if "dead" in url:
+                return _Resp(404)
+            return _Resp(200, "<html><script>x=1</script><p>hello world</p></html>")
+        def close(self):
+            pass
+
+    http = _HTTP()
+    f = ContentFetcher(client=http)
+    assert f.fetch("https://x.com/dead") is None
+    text = f.fetch("https://x.com/ok")
+    assert "hello world" in text and "x=1" not in text  # script stripped
+    f.fetch("https://x.com/ok")
+    assert http.calls == 2  # cached: 2 distinct URLs, second fetch not re-requested
+
+
+class _FakeFetcher:
+    def __init__(self, text):
+        self._text = text
+    def fetch(self, url):
+        return self._text
+    def close(self):
+        pass
+
+
+def test_unverifiable_quote_is_dropped(monkeypatch, tmp_path) -> None:
+    # Fetch on, but the fetched page does NOT contain the model's quote -> drop.
+    url = "https://www.home-barista.com/t/9"
+    fake = _FakeClient(
+        research_results=[_rr(url), _rr("")],
+        extract_results=[{"findings": [{
+            "kind": "support", "claim": "great", "quote": "this quote is not on the page at all",
+            "criterion": "taste", "severity": "unknown", "corroboration_count": 3,
+            "source_urls": [url], "skepticism_flags": [],
+        }]}],
+    )
+    orch = _make_orchestrator(monkeypatch, fake, tmp_path)
+    orch.config.fetch_enabled = True
+    orch._fetcher = _FakeFetcher("totally unrelated page content about something else")
+    cand = Candidate(name="X")
+    orch.investigate(Criteria(question="q", topic="t", disqualifiers=["metallic taste"]), cand)
+    assert cand.findings == []  # quote not grounded -> dropped
+
+
+def test_grounded_quote_is_kept(monkeypatch, tmp_path) -> None:
+    url = "https://www.home-barista.com/t/9"
+    quote = "no metallic taste even after months"
+    fake = _FakeClient(
+        research_results=[_rr(url), _rr("")],
+        extract_results=[{"findings": [{
+            "kind": "support", "claim": "great", "quote": quote,
+            "criterion": "taste", "severity": "unknown", "corroboration_count": 3,
+            "source_urls": [url], "skepticism_flags": [],
+        }]}],
+    )
+    orch = _make_orchestrator(monkeypatch, fake, tmp_path)
+    orch.config.fetch_enabled = True
+    orch._fetcher = _FakeFetcher(f"long forum thread ... {quote} ... more discussion")
+    cand = Candidate(name="X")
+    orch.investigate(Criteria(question="q", topic="t", disqualifiers=["metallic taste"]), cand)
+    assert len(cand.findings) == 1 and cand.findings[0].quote == quote
 
 
 def test_quote_is_rendered_in_advice() -> None:

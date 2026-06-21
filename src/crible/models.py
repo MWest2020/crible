@@ -21,6 +21,7 @@ class Criteria:
     """The structured criteria extracted from the user's question."""
 
     question: str
+    topic: str = ""  # short product category, for finding the specialist community
     positive: list[str] = field(default_factory=list)
     disqualifiers: list[str] = field(default_factory=list)
     budget: str | None = None

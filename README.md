@@ -43,6 +43,16 @@ sources** and gated by an **evidence-mix floor**:
   `evidence-mix-floor-not-met` caveat — a clean "Avoid" section always says whether it means
   "nothing failed" or "not enough trustworthy sources to judge".
 
+### Content grounding (live links + verified quotes)
+
+Because Anthropic's `web_search` user-agent cannot crawl some key communities (e.g. reddit),
+Crible fetches cited pages **itself** (`httpx` from your host) and **verifies each quote
+against the real page text** — a finding whose quote can't be grounded, or whose page won't
+fetch, is dropped (no live, grounded quote = no claim). Tune with `--no-fetch` /
+`CRIBLE_FETCH=0` and `--quote-match-ratio` / `CRIBLE_QUOTE_MATCH_RATIO` (default 0.8). Query
+augmentation also hunts the **topic's own specialist community** (`best <topic> forum`), not
+just reddit.
+
 Run the tests with `uv run pytest`.
 
 ## What this is

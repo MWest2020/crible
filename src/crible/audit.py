@@ -41,6 +41,9 @@ EVENT_QUERY_TEMPLATES = "query_templates"  # augmentation templates applied per 
 EVENT_SOURCE_TIER_MIX = "source_tier_mix"  # per-finding / per-candidate tier counts
 EVENT_FLOOR_CHECK = "floor_check"  # evidence-mix floor evaluation (before/after re-search)
 EVENT_FLOOR_NOT_MET = "evidence_mix_floor_not_met"  # loud caveat: too few trusted sources
+# Content grounding (change: ground-evidence-in-fetched-content)
+EVENT_FETCH = "fetch"  # a cited page was fetched (url, ok, chars)
+EVENT_QUOTE_CHECK = "quote_check"  # quote verified against fetched text (matched, score)
 
 
 def _redact(value: Any, secrets: list[str]) -> Any:
