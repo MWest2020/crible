@@ -168,6 +168,7 @@ class Orchestrator:
         self._fetcher = ContentFetcher(
             max_chars=config.max_fetch_chars, enabled=config.fetch_enabled
         )
+        self._candidate_brands: set[str] = set()  # set after landscape, for attribution
 
     # ---- stage 1: criteria ------------------------------------------------
 
@@ -373,13 +374,19 @@ class Orchestrator:
                     dropped_claim=claim, reason="quote not in cited page text",
                 )
                 continue
-            # Attribution guard: the quote must mention this candidate's brand, so a
-            # quote about a different product in a multi-product thread isn't misattributed.
-            brand = self._brand_token(candidate.name)
-            if brand and brand not in quote.lower():
+            # Attribution guard: drop only if the quote names a DIFFERENT candidate's
+            # brand and not this one (a quote about another product in a multi-product
+            # thread). Generic reviews that name no brand are kept — most real reviews
+            # on a product's own page don't repeat the brand.
+            ql = quote.lower()
+            this_brand = self._brand_token(candidate.name)
+            others = {b for b in self._candidate_brands if b and b != this_brand}
+            names_other = any(b in ql for b in others)
+            names_this = bool(this_brand) and this_brand in ql
+            if names_other and not names_this:
                 self.log.log(
                     ev.EVENT_NOTE, stage="attribution", candidate=candidate.name,
-                    dropped_claim=claim, reason=f"quote does not mention '{brand}'",
+                    dropped_claim=claim, reason="quote is about a different candidate",
                 )
                 continue
             sources = classify_sources(self.tier_list, [Source(url=u) for u in urls])
@@ -547,6 +554,7 @@ class Orchestrator:
         candidates: list[Candidate] = []
         try:
             candidates = self.build_landscape(criteria)
+            self._candidate_brands = {self._brand_token(c.name) for c in candidates}
             # Fail-fast budget guard: estimate the per-subagent cost from actuals
             # (seeded by the landscape cost) and DON'T start a subagent we can't
             # fund — so a token-heavy model aborts early with guidance instead of

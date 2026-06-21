@@ -528,9 +528,31 @@ def test_quote_attribution_guard_drops_offtopic(monkeypatch, tmp_path) -> None:
     orch = _make_orchestrator(monkeypatch, fake, tmp_path)
     orch.config.fetch_enabled = True
     orch._fetcher = _FakeFetcher("forum: my Stanley keeps coffee hot all day, love it")
+    orch._candidate_brands = {"zojirushi", "stanley"}  # Stanley is another candidate
     cand = Candidate(name="Zojirushi SM-SF48")
     orch.investigate(Criteria(question="q", topic="t", disqualifiers=["metallic taste"]), cand)
-    assert cand.findings == []  # 'zojirushi' not in the quote -> dropped as misattributed
+    # quote names 'stanley' (another candidate), not 'zojirushi' -> dropped as misattributed
+    assert cand.findings == []
+
+
+def test_attribution_keeps_generic_review(monkeypatch, tmp_path) -> None:
+    # A real review that names no brand must be KEPT (most reviews don't repeat the brand).
+    url = "https://www.amazon.com/dp/B000/product-reviews"
+    fake = _FakeClient(
+        research_results=[_rr(url), _rr("")],
+        extract_results=[{"findings": [{
+            "kind": "support", "claim": "hot", "quote": "keeps my coffee hot for 8 hours, love it",
+            "criterion": "keeps coffee hot", "severity": "unknown", "corroboration_count": 2,
+            "source_urls": [url], "skepticism_flags": [],
+        }]}],
+    )
+    orch = _make_orchestrator(monkeypatch, fake, tmp_path)
+    orch.config.fetch_enabled = True
+    orch._fetcher = _FakeFetcher("Amazon review: keeps my coffee hot for 8 hours, love it")
+    orch._candidate_brands = {"zojirushi", "stanley"}
+    cand = Candidate(name="Zojirushi SM-SF48")
+    orch.investigate(Criteria(question="q", topic="t", disqualifiers=["metallic taste"]), cand)
+    assert len(cand.findings) == 1  # no other brand named -> kept
 
 
 def test_run_dir_is_slug_forward(tmp_path) -> None:

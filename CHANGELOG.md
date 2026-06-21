@@ -20,6 +20,10 @@ All notable changes to this project are documented here. Dates are ISO 8601.
   `best-travel-thermos-for-quality_2026-06-21`, with `-2`/`-3` on same-day clashes) instead of
   the ISO `20260621T205202Z-...` stamp.
 - Tests: 37 (+4). Ruff clean.
+- **Attribution guard fix**: the first version required the brand IN the quote, which dropped
+  every genuine review (reviews on a product page don't repeat the brand) -> empty results.
+  Now it drops only when the quote names a DIFFERENT candidate's brand and not this one;
+  generic reviews are kept. Tests 38.
 
 ### 2026-06-21 — Proof = genuine user experience; retrieval targets reviews + fora
 
