@@ -79,11 +79,13 @@ class LLMClient:
 
     def research(self, system: str, prompt: str) -> ResearchResult:
         """Run one research turn with web_search; loop over pause_turn safely."""
-        tool = {
+        tool: dict[str, Any] = {
             "type": self.config.web_search_tool_type(),
             "name": "web_search",
             "max_uses": self.config.max_search_uses_per_thread,
         }
+        if self.config.blocked_search_domains:
+            tool["blocked_domains"] = self.config.blocked_search_domains
         messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
         sources: list[Source] = []
         queries: list[str] = []

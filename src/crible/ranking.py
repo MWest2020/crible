@@ -19,18 +19,20 @@ from __future__ import annotations
 from .models import Candidate, Finding
 
 # Tier weights for evidence strength (operator hierarchy: discussion > reviews >
-# blogs). Unknown sits just above low so unclassified marketing can't carry a pick.
-_TIER_WEIGHT = {"high": 1.0, "medium": 0.55, "unknown": 0.25, "low": 0.1}
+# blogs). Blogs/marketing (low) and unclassified (unknown) are an echo chamber
+# and carry essentially no weight — corroboration already excludes them, this is
+# belt-and-braces so blog volume can never move a ranking.
+_TIER_WEIGHT = {"high": 1.0, "medium": 0.6, "unknown": 0.05, "low": 0.0}
 _SEVERITY_WEIGHT = {"disqualifying": 1.0, "minor": 0.4, "unknown": 0.4}
 
 
 def _support_weight(finding: Finding) -> float:
-    trust = max((_TIER_WEIGHT.get(s.tier, 0.25) for s in finding.sources), default=0.0)
+    trust = max((_TIER_WEIGHT.get(s.tier, 0.05) for s in finding.sources), default=0.0)
     return trust * finding.corroboration_count
 
 
 def _failure_penalty(finding: Finding) -> float:
-    trust = max((_TIER_WEIGHT.get(s.tier, 0.25) for s in finding.sources), default=0.0)
+    trust = max((_TIER_WEIGHT.get(s.tier, 0.05) for s in finding.sources), default=0.0)
     severity = _SEVERITY_WEIGHT.get(finding.severity, 0.4)
     return trust * finding.corroboration_count * severity
 

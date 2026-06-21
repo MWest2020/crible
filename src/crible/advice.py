@@ -15,7 +15,31 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlparse
+
 from .models import Candidate, Criteria, Finding
+
+_CREDIBLE_TIERS = ("high", "medium")
+
+
+def _credible_host_count(findings: list[Finding]) -> int:
+    hosts = {
+        (urlparse(s.url).hostname or s.url).lower()
+        for f in findings
+        for s in f.sources
+        if s.tier in _CREDIBLE_TIERS
+    }
+    return len(hosts)
+
+
+def _has_credible_support(cand: Candidate, threshold: int) -> bool:
+    """A candidate is recommendable only with credible-grounded support."""
+    return any(
+        f.kind == "support"
+        and f.corroboration_count >= threshold
+        and any(s.tier in _CREDIBLE_TIERS for s in f.sources)
+        for f in cand.findings
+    )
 
 
 def _links(findings: list[Finding]) -> list[str]:
@@ -30,7 +54,7 @@ def _links(findings: list[Finding]) -> list[str]:
     return out
 
 
-def render(criteria: Criteria, ranked: list[Candidate]) -> str:
+def render(criteria: Criteria, ranked: list[Candidate], corroboration_threshold: int = 2) -> str:
     """Produce the Markdown advice document for one run."""
     lines: list[str] = ["# Crible advice", ""]
     lines.append(f"**Question:** {criteria.question}")
@@ -42,18 +66,30 @@ def render(criteria: Criteria, ranked: list[Candidate]) -> str:
         lines.append(f"**Budget:** {criteria.budget}")
     lines.append("")
 
-    recommended = [c for c in ranked if not c.disqualified and c.findings]
     rejected = [c for c in ranked if c.disqualified]
-    unevidenced = [c for c in ranked if not c.disqualified and not c.findings]
+    recommended = [
+        c for c in ranked
+        if not c.disqualified and _has_credible_support(c, corroboration_threshold)
+    ]
+    # Not disqualified, but only blog/echo-chamber support — not recommendable.
+    unevidenced = [
+        c for c in ranked
+        if not c.disqualified and not _has_credible_support(c, corroboration_threshold)
+    ]
 
     lines.append("## Recommended")
     if not recommended:
-        lines.append("_No candidate has sufficient grounded support to recommend._")
+        lines.append(
+            "_No candidate has credible grounded support (fora / user reviews) to recommend._"
+        )
     for cand in recommended:
         supports = [f for f in cand.findings if f.kind == "support"]
-        n = sum(f.corroboration_count for f in supports) or len(supports)
+        n = _credible_host_count(supports)
         lines.append(f"### {cand.name}")
-        lines.append(f"This fits best, because it meets the requirements ({n} sources).")
+        lines.append(
+            f"This fits best, because it meets the requirements "
+            f"({n} independent credible sources — fora / user reviews)."
+        )
         lines.append(f"_Reason:_ {cand.reason}")
         for f in supports:
             crit = f" [{f.criterion}]" if f.criterion else ""
@@ -77,8 +113,12 @@ def render(criteria: Criteria, ranked: list[Candidate]) -> str:
         lines.append("")
 
     if unevidenced:
-        lines.append("## Insufficient evidence")
-        lines.append("_Considered, but no grounded claim survived verification:_")
+        lines.append("## Insufficient credible evidence")
+        lines.append(
+            "_Considered, but supported only by blogs / marketing / unclassified pages "
+            "(an echo chamber) — no credible fora or user-review corroboration, so not "
+            "recommended:_"
+        )
         for cand in unevidenced:
             lines.append(f"- {cand.name}")
         lines.append("")

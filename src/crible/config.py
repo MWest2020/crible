@@ -61,6 +61,20 @@ class Config:
     # Skepticism / ranking.
     corroboration_threshold: int = 2  # >= 2 independent corroborations
 
+    # Known blog / affiliate / SEO domains to keep out of search results at the
+    # source (an echo chamber that does not count as evidence anyway).
+    blocked_search_domains: list[str] = field(
+        default_factory=lambda: [
+            "homegrounds.co",
+            "perfectdailygrind.com",
+            "thespruceeats.com",
+            "gearjunkie.com",
+            "wirecutter.com",
+            "thegadgeteer.com",
+            "imprintnow.com",
+        ]
+    )
+
     # Paths.
     source_tiers_path: Path = field(
         default_factory=lambda: Path("config/source_tiers.yaml")

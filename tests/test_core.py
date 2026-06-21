@@ -88,13 +88,37 @@ def test_single_source_is_not_evidence(tier_list: TierList) -> None:
     assert f.corroboration_count == 1
 
 
-def test_independent_corroboration_counts_distinct_hosts(tier_list: TierList) -> None:
+def test_independent_corroboration_counts_distinct_credible_hosts(tier_list: TierList) -> None:
     srcs = classify_sources(tier_list, [
         Source(url="https://reddit.com/r/coffee/1"),
         Source(url="https://reddit.com/r/coffee/2"),  # same host -> not independent
         Source(url="https://community.example/threads/9"),
     ])
     assert count_independent(srcs) == 2
+
+
+def test_blogs_are_echo_chamber_zero_corroboration(tier_list: TierList) -> None:
+    # Ten affiliate blogs are not corroboration — credible count must be zero.
+    blogs = classify_sources(tier_list, [
+        Source(url=f"https://www.homegrounds.co/review-{i}/") for i in range(10)
+    ])
+    assert count_independent(blogs) == 0
+    f = Finding(candidate="X", kind="support", claim="great", sources=blogs,
+                corroboration_count=10)  # model claimed 10
+    fired = evaluate_finding(f, threshold=2)
+    assert "no-credible-source-echo-chamber" in fired
+    assert f.corroboration_count == 0
+
+
+def test_user_review_count_is_honoured(tier_list: TierList) -> None:
+    # One marketplace reviews page the model says has 7 independent reviewers.
+    srcs = classify_sources(tier_list, [
+        Source(url="https://www.amazon.com/dp/B000/product-reviews"),
+    ])
+    f = Finding(candidate="X", kind="support", claim="no metallic taste",
+                sources=srcs, corroboration_count=7)
+    evaluate_finding(f, threshold=2)
+    assert f.corroboration_count == 7  # honoured (credible host present)
 
 
 # ---- ranking --------------------------------------------------------------

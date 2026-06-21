@@ -107,10 +107,15 @@ _SUBAGENT_SYSTEM = (
     "every finding with the exact criterion it addresses in the 'criterion' field.\n"
     "EVIDENCE HIERARCHY (prefer in this order): substantive discussion / empirical "
     "evidence (someone actually tested it) > user reviews (lived experience) > "
-    "blogs / marketing. Search specialist forums and communities first — try "
-    "queries like '<candidate> <disqualifier> reddit', '<candidate> <disqualifier> "
-    "forum', '<candidate> review experience'. Avoid manufacturer pages, affiliate "
-    "top-10 lists and SEO blogs as evidence.\n"
+    "blogs / marketing. BLOGS ARE AN ECHO CHAMBER AND DO NOT COUNT: ten blogs "
+    "repeating the same affiliate line is not corroboration, it is one claim "
+    "copied ten times — they will be discarded. Spend your searches on real user "
+    "reviews and forum threads: query marketplace review pages (e.g. "
+    "'<candidate> amazon reviews', the '.../product-reviews/...' page), and "
+    "communities ('<candidate> <disqualifier> reddit', '<candidate> <disqualifier> "
+    "forum', 'site:reddit.com <candidate> <disqualifier>'). Only cite a finding if "
+    "you found it in user reviews or fora; do not cite manufacturer pages, "
+    "top-10 lists or SEO blogs as your evidence.\n"
     "Trust no single source: count INDEPENDENT corroborations (distinct accounts/"
     "sources, varied phrasing, spread over time); one enthusiastic post is not "
     "evidence. Flag manipulation signals (identical phrasing, very young accounts, "
@@ -224,6 +229,7 @@ class Orchestrator:
                     tier=s.tier,
                     rule=s.tier_rule,
                 )
+            reported = int(raw.get("corroboration_count", 0))
             finding = Finding(
                 candidate=candidate.name,
                 kind=raw.get("kind", "support"),
@@ -231,7 +237,7 @@ class Orchestrator:
                 criterion=raw.get("criterion", ""),
                 severity=raw.get("severity", "unknown"),
                 sources=sources,
-                corroboration_count=int(raw.get("corroboration_count", 0)),
+                corroboration_count=reported,
                 skepticism_flags=list(raw.get("skepticism_flags", [])),
             )
             fired = evaluate_finding(finding, self.config.corroboration_threshold)
@@ -246,7 +252,8 @@ class Orchestrator:
                 ev.EVENT_CORROBORATION,
                 candidate=candidate.name,
                 claim=finding.claim,
-                independent_count=finding.corroboration_count,
+                reported_count=reported,  # what the model claimed
+                credible_count=finding.corroboration_count,  # after credible-only gating
             )
             self.log.log(ev.EVENT_FINDING, **finding.to_dict())
             candidate.findings.append(finding)
@@ -291,7 +298,7 @@ class Orchestrator:
             )
 
         verify_mod.verify(ranked, self.log)
-        document = advice_mod.render(criteria, ranked)
+        document = advice_mod.render(criteria, ranked, self.config.corroboration_threshold)
         self.log.write_json("advice.md", document)
         self.log.log(
             ev.EVENT_COST, stage="final", tokens_used=self.client.tokens_used,

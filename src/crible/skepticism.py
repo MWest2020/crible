@@ -3,10 +3,12 @@
 #
 # src/crible/skepticism.py — within-source skepticism and corroboration counting.
 #
-# Independent corroboration is the unit of evidence (design D4). These helpers
-# count distinct sources, classify them via the seeded tier list, and decide
-# whether a finding clears the configurable corroboration threshold. Every rule
-# applied is explicit and returned for logging — no hidden heuristics.
+# Independent corroboration is the unit of evidence (design D4) — but only
+# CREDIBLE evidence counts. Blogs / affiliate / marketing (low) and unclassified
+# (unknown) sources are an echo chamber: ten of them is not corroboration, it is
+# one affiliate line copied ten times. So corroboration counts only high (fora /
+# discussion) and medium (user reviews) sources. A blog-only finding gets a
+# corroboration count of zero and cannot support a recommendation.
 #
 # Writes: read-only
 # Idempotent: yes
@@ -19,10 +21,21 @@ from urllib.parse import urlparse
 from .models import Finding, Source
 from .sources import TierList
 
+# Tiers that count as real evidence (lived experience / substantive discussion).
+CREDIBLE_TIERS = ("high", "medium")
+
+# Cap on the model-reported corroboration count, to bound hallucinated inflation.
+_MAX_CORROBORATION = 25
+
 # Explicit skepticism rules (names recorded in the audit trail when they fire).
 RULE_SINGLE_SOURCE = "single-source-not-evidence"
 RULE_BELOW_THRESHOLD = "below-corroboration-threshold"
 RULE_NO_HIGH_TRUST = "no-high-trust-corroboration"
+RULE_NO_CREDIBLE = "no-credible-source-echo-chamber"
+
+
+def _host(url: str) -> str:
+    return (urlparse(url).hostname or url).lower()
 
 
 def classify_sources(tier_list: TierList, sources: list[Source]) -> list[Source]:
@@ -37,26 +50,41 @@ def classify_sources(tier_list: TierList, sources: list[Source]) -> list[Source]
     return out
 
 
-def count_independent(sources: list[Source]) -> int:
-    """Count independent corroborations = distinct hostnames among the sources.
+def credible_sources(sources: list[Source]) -> list[Source]:
+    """Sources that count as evidence (fora / discussion + user reviews)."""
+    return [s for s in sources if s.tier in CREDIBLE_TIERS]
 
-    Distinct hosts is a deliberately conservative, explainable proxy for
-    independence; the LLM's own corroboration_count is cross-checked against it.
+
+def count_independent(sources: list[Source]) -> int:
+    """Independent corroborations = distinct CREDIBLE hostnames.
+
+    Blogs / marketing / unknown are excluded — they are an echo chamber and do
+    not corroborate anything.
     """
-    hosts = {(urlparse(s.url).hostname or s.url).lower() for s in sources}
-    return len(hosts)
+    return len({_host(s.url) for s in sources if s.tier in CREDIBLE_TIERS})
 
 
 def evaluate_finding(finding: Finding, threshold: int) -> list[str]:
-    """Apply skepticism rules to a finding; return the rule ids that fired.
+    """Apply skepticism rules; return the rule ids that fired.
 
-    Also normalises finding.corroboration_count to the conservative
-    distinct-host count so ranking never over-credits a single source.
+    Sets finding.corroboration_count to a credible-only value: zero if no
+    credible source backs it (echo chamber), otherwise the larger of the number
+    of distinct credible hosts and the model-reported independent-account count
+    (capped) — so genuine multi-reviewer / multi-thread evidence is honoured but
+    blog volume is not.
     """
     fired: list[str] = []
-    independent = count_independent(finding.sources)
-    finding.corroboration_count = independent
+    credible = credible_sources(finding.sources)
+    distinct_hosts = len({_host(s.url) for s in credible})
+    reported = max(0, int(finding.corroboration_count))
 
+    if not credible:
+        finding.corroboration_count = 0
+        fired.append(RULE_NO_CREDIBLE)
+    else:
+        finding.corroboration_count = max(distinct_hosts, min(reported, _MAX_CORROBORATION))
+
+    independent = finding.corroboration_count
     if independent <= 1:
         fired.append(RULE_SINGLE_SOURCE)
     if independent < threshold:
