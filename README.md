@@ -2,8 +2,29 @@
 
 > *Crible* (French: "sieve") — a bias-correcting product-research agent.
 
-**Status:** OpenSpec proposal stage. No implementation yet — the design is being specified
-first (OpenSpec-first). See [`openspec/changes/add-bias-correcting-research-agent/`](openspec/changes/add-bias-correcting-research-agent/).
+**Status:** MVP implemented (single-threaded). The OpenSpec change
+[`add-bias-correcting-research-agent`](openspec/changes/add-bias-correcting-research-agent/)
+is approved and most of `tasks.md` is done; the live end-to-end worked-example run and the
+opt-in parallel mode are the remaining items. The deterministic core (source classification,
+skepticism/corroboration, ranking, audit redaction) is covered by tests.
+
+## Install & run
+
+Requires Python 3.12+ and [`uv`](https://docs.astral.sh/uv/) (never `pip` directly).
+
+```
+uv sync                                   # reproducible install from uv.lock
+export ANTHROPIC_API_KEY=...              # never hardcoded, never logged
+uv run crible "the best travel thermos for quality coffee, no metallic taste"
+```
+
+Each run writes a directory under `runs/` containing `audit.jsonl` (the full trail),
+`plan.json` (the LEAD plan), and `advice.md` (the recommendation). Tune behaviour with
+`--model`, `--effort`, `--token-ceiling`, `--max-subagents`, `--corroboration-threshold`,
+or the matching `CRIBLE_*` environment variables. Parallel subagents are an explicit
+opt-in (`CRIBLE_PARALLEL=1`) and default OFF.
+
+Run the tests with `uv run pytest`.
 
 ## What this is
 

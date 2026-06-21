@@ -1,0 +1,142 @@
+# SPDX-License-Identifier: EUPL-1.2
+# role: library
+#
+# src/crible/config.py — explicit, auditable run configuration.
+#
+# Every knob is here, with safe defaults: parallelisation OFF, a token ceiling
+# always set, corroboration threshold >= 2. The API key is read from the
+# environment (or a .env loaded by the caller) and is NEVER hardcoded or logged.
+#
+# Writes: read-only
+# Idempotent: yes
+# Requires: ANTHROPIC_API_KEY in the environment for a live run
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field, asdict
+from pathlib import Path
+from typing import Any
+
+# Map a model id to the web_search server-tool version it supports.
+# Newer models get the dynamic-filtering variant; older models the basic one.
+_WEB_SEARCH_NEW = "web_search_20260209"
+_WEB_SEARCH_BASIC = "web_search_20250305"
+_NEW_SEARCH_MODELS = (
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-opus-4-6",
+    "claude-sonnet-4-6",
+    "claude-fable-5",
+)
+
+
+class ConfigError(RuntimeError):
+    """Raised when configuration is invalid or a required secret is missing."""
+
+
+@dataclass
+class Config:
+    """Resolved configuration for one research run."""
+
+    # Provider / model (sovereign/cloud split via provider + base_url).
+    provider: str = "anthropic"
+    model: str = "claude-opus-4-8"
+    base_url: str | None = None  # override endpoint (sovereign deployments)
+    api_key_env: str = "ANTHROPIC_API_KEY"
+    effort: str = "high"  # low | medium | high | xhigh | max
+
+    # Cost / safety ceilings.
+    token_ceiling: int = 200_000  # cumulative tokens; halts the run when reached
+
+    # Orchestration.
+    parallelism_enabled: bool = False  # default OFF — explicit opt-in only
+    max_subagents: int = 8
+    max_iterations_per_thread: int = 6  # bounded tool-use loop per thread
+    max_search_uses_per_thread: int = 5  # web_search max_uses cap
+
+    # Skepticism / ranking.
+    corroboration_threshold: int = 2  # >= 2 independent corroborations
+
+    # Paths.
+    source_tiers_path: Path = field(
+        default_factory=lambda: Path("config/source_tiers.yaml")
+    )
+    runs_dir: Path = field(default_factory=lambda: Path("runs"))
+
+    def web_search_tool_type(self) -> str:
+        """Pick the web_search tool version that matches the configured model."""
+        return _WEB_SEARCH_NEW if self.model in _NEW_SEARCH_MODELS else _WEB_SEARCH_BASIC
+
+    def resolve_api_key(self) -> str:
+        """Read the API key from the environment; fail fast if absent.
+
+        Never returns the key into a log or the audit trail — callers pass it
+        straight to the SDK client.
+        """
+        key = os.environ.get(self.api_key_env, "").strip()
+        if not key:
+            raise ConfigError(
+                f"missing API key: set the {self.api_key_env} environment variable "
+                "(crible never reads or stores credentials in files)"
+            )
+        return key
+
+    def redaction_values(self) -> list[str]:
+        """Secret values that must be scrubbed from any audit output."""
+        key = os.environ.get(self.api_key_env, "").strip()
+        return [key] if key else []
+
+    def effective_settings(self) -> dict[str, Any]:
+        """Non-secret settings recorded in the audit trail for reproducibility."""
+        d = asdict(self)
+        d["source_tiers_path"] = str(self.source_tiers_path)
+        d["runs_dir"] = str(self.runs_dir)
+        d["web_search_tool_type"] = self.web_search_tool_type()
+        # api_key_env is the *name* of the env var, not the secret — safe to log.
+        return d
+
+
+def load_config(**overrides: Any) -> Config:
+    """Build a Config from defaults, environment overrides, then explicit kwargs.
+
+    Environment overrides (all optional):
+      CRIBLE_MODEL, CRIBLE_PROVIDER, CRIBLE_BASE_URL, CRIBLE_EFFORT,
+      CRIBLE_TOKEN_CEILING, CRIBLE_PARALLEL (0/1), CRIBLE_MAX_SUBAGENTS,
+      CRIBLE_CORROBORATION_THRESHOLD, CRIBLE_SOURCE_TIERS, CRIBLE_RUNS_DIR
+    Explicit kwargs win over the environment.
+    """
+    cfg = Config()
+
+    env = os.environ
+    if v := env.get("CRIBLE_MODEL"):
+        cfg.model = v
+    if v := env.get("CRIBLE_PROVIDER"):
+        cfg.provider = v
+    if v := env.get("CRIBLE_BASE_URL"):
+        cfg.base_url = v
+    if v := env.get("CRIBLE_EFFORT"):
+        cfg.effort = v
+    if v := env.get("CRIBLE_TOKEN_CEILING"):
+        cfg.token_ceiling = int(v)
+    if v := env.get("CRIBLE_PARALLEL"):
+        cfg.parallelism_enabled = v.strip() in ("1", "true", "yes", "on")
+    if v := env.get("CRIBLE_MAX_SUBAGENTS"):
+        cfg.max_subagents = int(v)
+    if v := env.get("CRIBLE_CORROBORATION_THRESHOLD"):
+        cfg.corroboration_threshold = int(v)
+    if v := env.get("CRIBLE_SOURCE_TIERS"):
+        cfg.source_tiers_path = Path(v)
+    if v := env.get("CRIBLE_RUNS_DIR"):
+        cfg.runs_dir = Path(v)
+
+    for key, value in overrides.items():
+        if not hasattr(cfg, key):
+            raise ConfigError(f"unknown config override: {key}")
+        setattr(cfg, key, value)
+
+    if cfg.token_ceiling <= 0:
+        raise ConfigError("token_ceiling must be positive")
+    if cfg.corroboration_threshold < 1:
+        raise ConfigError("corroboration_threshold must be >= 1")
+    return cfg

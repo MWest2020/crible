@@ -32,3 +32,6 @@ runs/
 *.swp
 .idea/
 .vscode/
+
+#context
+evaluator_pattern.jpg

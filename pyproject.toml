@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: EUPL-1.2
+[project]
+name = "crible"
+version = "0.1.0"
+description = "Bias-correcting product-research agent — distils truth from lived experience, never amplifies marketing/SEO/affiliate bias."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "EUPL-1.2"
+authors = [
+    { name = "MWest2020", email = "mwesterweel@hotmail.com" }
+]
+keywords = ["research-agent", "anthropic", "web-search", "bias-correction", "openspec"]
+dependencies = [
+    "anthropic>=0.39",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+]
+
+[project.scripts]
+crible = "crible.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.10.4,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

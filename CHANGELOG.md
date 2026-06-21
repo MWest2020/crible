@@ -31,3 +31,27 @@ No implementation code yet — proposal awaits approval.
 - Embedded the concrete values into the specs (failure-mode threshold ≥2, token ceiling,
   provider-configuration run-level config keys) and `tasks.md`.
 - Re-validated with `openspec validate --strict`.
+
+### 2026-06-21 — MVP implementation (single-threaded)
+
+- Scaffolded the Python package with `uv` (src layout, EUPL-1.2, SPDX headers); pinned
+  Python 3.12; added `anthropic`, `pyyaml`, `python-dotenv` and recorded `uv.lock`.
+- Implemented the single-threaded orchestrator-worker pipeline:
+  - `config.py` — explicit run config (provider/model, token ceiling, parallelism default
+    OFF, corroboration threshold ≥2, per-thread bounds, subagent cap); key via env, never logged.
+  - `audit.py` — append-only JSONL trail with credential redaction; writes `plan.json` / `advice.md`.
+  - `sources.py` + `config/source_tiers.yaml` — seeded, explainable trust-tier classification
+    (every tier traces to a rule id; no learned score).
+  - `llm.py` — Anthropic Messages-API client: agentic `web_search` loop (model-matched tool
+    version, `pause_turn` handling), token accounting + hard ceiling, `output_config.format`
+    structured extraction.
+  - `criteria.py` / `orchestrator.py` — criteria extraction (disqualifier-first), landscape+plan,
+    failure-hunting subagent threads, classification, skepticism/corroboration.
+  - `skepticism.py` — independent-corroboration counting + explicit logged rules.
+  - `ranking.py` — source-trust × corroboration × failure-severity; no commercial/popularity input.
+  - `verify.py` — separate pass dropping ungrounded claims; emits grounding to the trail.
+  - `advice.py` + `cli.py` — prescribed advice format; Markdown to run dir + stdout.
+- Tests (`tests/test_core.py`): 14 passing — classification, skepticism, ranking neutrality +
+  disqualification, audit redaction, config defaults. Ruff clean.
+- Remaining: run-wide query dedup (3.4), interactive disqualifier ask-back (4.2), the live
+  worked-example run (12.x), and opt-in parallel subagents (13.x).
