@@ -95,9 +95,13 @@ _LANDSCAPE_SYSTEM = (
     "You are the landscape lead of a bias-correcting product-research agent. "
     "Build a BROAD candidate set that deliberately includes niche/long-tail "
     "options sourced from specialist communities — not only mainstream top-10 "
-    "products. Popularity is not a virtue here. Then write a short research plan: "
-    "one line per candidate describing how to hunt its failure modes in "
-    "high-trust sources. Use web search to ground the candidate set."
+    "products. Popularity is not a virtue here. "
+    "CRITICAL: each candidate MUST be a SPECIFIC, buyable product — exact brand + "
+    "model (e.g. 'Zojirushi SM-SF48', 'Fellow Carter Move Mug'), NOT a category or "
+    "material class (NOT 'glass-lined thermoses' or '316L stainless thermoses'). "
+    "If you only know a category, name the specific models within it. "
+    "Then write a short research plan: one line per candidate describing how to hunt "
+    "its failure modes in high-trust sources. Use web search to ground the set."
 )
 
 _SUBAGENT_SYSTEM = (

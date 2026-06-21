@@ -33,13 +33,12 @@ def _credible_host_count(findings: list[Finding]) -> int:
 
 
 def _has_credible_support(cand: Candidate, threshold: int) -> bool:
-    """A candidate is recommendable only with credible-grounded support."""
-    return any(
-        f.kind == "support"
-        and f.corroboration_count >= threshold
-        and any(s.tier in _CREDIBLE_TIERS for s in f.sources)
-        for f in cand.findings
-    )
+    """Recommendable when the candidate has >= threshold distinct credible (fora /
+    user-review) hosts across its SUPPORT findings — corroboration accrues across
+    the candidate, not within a single finding (different aspects cite different
+    sources). This matches the evidence-mix floor."""
+    supports = [f for f in cand.findings if f.kind == "support"]
+    return _credible_host_count(supports) >= threshold
 
 
 def _links(findings: list[Finding]) -> list[str]:
