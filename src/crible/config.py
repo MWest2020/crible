@@ -44,7 +44,10 @@ class Config:
     model: str = "claude-opus-4-8"
     base_url: str | None = None  # override endpoint (sovereign deployments)
     api_key_env: str = "ANTHROPIC_API_KEY"
-    effort: str = "high"  # low | medium | high | xhigh | max
+    # Effort multiplies thinking + tool tokens on EVERY call; this agent makes
+    # ~12 calls per run, so "medium" is the safer default. Bump to high/xhigh
+    # (e.g. on Opus) only when you want maximum quality and accept the cost.
+    effort: str = "medium"  # low | medium | high | xhigh | max
 
     # Cost / safety ceilings.
     token_ceiling: int = 200_000  # cumulative tokens; halts the run when reached
