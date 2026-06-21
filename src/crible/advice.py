@@ -56,7 +56,8 @@ def render(criteria: Criteria, ranked: list[Candidate]) -> str:
         lines.append(f"This fits best, because it meets the requirements ({n} sources).")
         lines.append(f"_Reason:_ {cand.reason}")
         for f in supports:
-            lines.append(f"- {f.claim} ({f.corroboration_count} independent sources)")
+            crit = f" [{f.criterion}]" if f.criterion else ""
+            lines.append(f"- {f.claim}{crit} ({f.corroboration_count} independent sources)")
             lines.extend(_links([f]))
         lines.append("")
 
@@ -67,9 +68,10 @@ def render(criteria: Criteria, ranked: list[Candidate]) -> str:
         failures = [f for f in cand.findings if f.kind == "failure"]
         lines.append(f"### {cand.name}")
         for f in failures:
+            crit = f" [{f.criterion}]" if f.criterion else ""
             lines.append(
                 f"Avoid, because {f.corroboration_count} independent users report "
-                f"<{f.claim}> (severity: {f.severity})."
+                f"<{f.claim}>{crit} (severity: {f.severity})."
             )
             lines.extend(_links([f]))
         lines.append("")

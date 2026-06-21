@@ -40,14 +40,34 @@ def test_affiliate_toplist_is_low(tier_list: TierList) -> None:
     assert s.tier_rule  # an explicit rule produced it, not a black box
 
 
-def test_marketplace_is_low(tier_list: TierList) -> None:
-    assert tier_list.classify("https://www.amazon.com/dp/B000").tier == "low"
+def test_marketplace_is_medium(tier_list: TierList) -> None:
+    # Marketplaces host user reviews (lived experience, gameable) — ranked
+    # above blogs, below specialist fora.
+    assert tier_list.classify("https://www.amazon.com/dp/B000").tier == "medium"
+
+
+def test_manufacturer_blog_is_low(tier_list: TierList) -> None:
+    assert tier_list.classify("https://holohololife.com/blogs/news/sus316").tier == "low"
+
+
+def test_known_affiliate_blog_is_low(tier_list: TierList) -> None:
+    assert tier_list.classify("https://www.homegrounds.co/zojirushi-mug-review/").tier == "low"
 
 
 def test_reddit_is_high(tier_list: TierList) -> None:
     s = tier_list.classify("https://www.reddit.com/r/coffee/comments/x")
     assert s.tier == "high"
     assert s.tier_rule == "forum-reddit"
+
+
+def test_coffee_forum_is_high(tier_list: TierList) -> None:
+    assert tier_list.classify("https://www.coffeeforums.com/threads/odd-taste.7883/").tier == "high"
+
+
+def test_evidence_hierarchy_weights() -> None:
+    from crible.ranking import _TIER_WEIGHT
+    assert _TIER_WEIGHT["high"] > _TIER_WEIGHT["medium"] > _TIER_WEIGHT["low"]
+    assert _TIER_WEIGHT["medium"] > _TIER_WEIGHT["unknown"] > _TIER_WEIGHT["low"]
 
 
 def test_unknown_when_unmatched(tier_list: TierList) -> None:

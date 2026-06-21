@@ -61,6 +61,7 @@ _FINDINGS_SCHEMA = {
                 "properties": {
                     "kind": {"type": "string", "enum": ["failure", "support"]},
                     "claim": {"type": "string"},
+                    "criterion": {"type": "string"},
                     "severity": {
                         "type": "string",
                         "enum": ["disqualifying", "minor", "unknown"],
@@ -72,6 +73,7 @@ _FINDINGS_SCHEMA = {
                 "required": [
                     "kind",
                     "claim",
+                    "criterion",
                     "severity",
                     "corroboration_count",
                     "source_urls",
@@ -96,9 +98,19 @@ _LANDSCAPE_SYSTEM = (
 
 _SUBAGENT_SYSTEM = (
     "You are a research subagent in a bias-correcting product agent. Investigate "
-    "ONE candidate. Actively hunt its FAILURE MODES (especially the user's "
-    "disqualifiers) in high-trust sources — specialist forums, communities, "
-    "lived experience — not marketing or top-10 lists. Also note genuine support. "
+    "ONE candidate against the user's criteria.\n"
+    "PRIORITY: the user's DISQUALIFIERS are the point. Spend most effort finding "
+    "empirical evidence about the disqualifier(s) specifically (e.g. for 'metallic "
+    "taste', hunt taste/flavour reports — NOT temperature/insulation). Do not pad "
+    "with generic positive specs that the user did not ask about; a finding that "
+    "does not address a stated requirement or disqualifier is noise — drop it. Tag "
+    "every finding with the exact criterion it addresses in the 'criterion' field.\n"
+    "EVIDENCE HIERARCHY (prefer in this order): substantive discussion / empirical "
+    "evidence (someone actually tested it) > user reviews (lived experience) > "
+    "blogs / marketing. Search specialist forums and communities first — try "
+    "queries like '<candidate> <disqualifier> reddit', '<candidate> <disqualifier> "
+    "forum', '<candidate> review experience'. Avoid manufacturer pages, affiliate "
+    "top-10 lists and SEO blogs as evidence.\n"
     "Trust no single source: count INDEPENDENT corroborations (distinct accounts/"
     "sources, varied phrasing, spread over time); one enthusiastic post is not "
     "evidence. Flag manipulation signals (identical phrasing, very young accounts, "
@@ -216,6 +228,7 @@ class Orchestrator:
                 candidate=candidate.name,
                 kind=raw.get("kind", "support"),
                 claim=raw.get("claim", ""),
+                criterion=raw.get("criterion", ""),
                 severity=raw.get("severity", "unknown"),
                 sources=sources,
                 corroboration_count=int(raw.get("corroboration_count", 0)),

@@ -6,63 +6,108 @@
 # classification traces back to one explicit rule below (the "boring, auditable"
 # choice; the learned alternative is the clever trap we refuse).
 #
-# Each rule has:
-#   id:        stable identifier, recorded in the audit trail
-#   tier:      "low" | "high"
-#   match:     "domain" (substring of the host) or "regex" (against the full URL)
-#   patterns:  list of substrings or regexes
-#   note:      human-readable rationale
+# Evidence hierarchy (operator's ranking): substantive discussion / empirical
+# evidence > user reviews > blogs / marketing.
+#   high   = specialist fora, communities, in-depth discussion, lived experience
+#            that is hard to game at scale.
+#   medium = user-review platforms (marketplaces, review sites). Lived experience,
+#            but gameable — within-source skepticism still applies.
+#   low    = blogs, affiliate top-10 lists, manufacturer/SEO/sponsored marketing.
+# Anything unmatched stays "unknown" and is weighted only slightly above "low".
 #
-# Evaluation order: HIGH rules first, then LOW rules, first match wins. Anything
-# unmatched stays "unknown" and is treated cautiously by the ranking step.
-# Edit this file to correct misclassifications — no code change required.
+# Each rule: id (logged), match ("domain" substring of host | "regex" on full URL),
+# patterns, note. Evaluation order: high -> medium -> low, first match wins. Edit
+# this file to correct misclassifications — no code change required.
 
 high:
   - id: forum-reddit
     match: domain
     patterns: ["reddit.com"]
     note: Topic-specific subreddits carry lived experience and independent reports.
-  - id: forum-stackexchange
+  - id: forum-coffee-specialist
     match: domain
-    patterns: ["stackexchange.com", "stackoverflow.com", "superuser.com"]
-    note: Q&A communities with voting and independent answers.
+    patterns:
+      - "home-barista.com"
+      - "coffeeforums.co"
+      - "coffeeforums.com"
+      - "coffeegeek.com"
+      - "coffeesnobs.com.au"
+    note: Specialist coffee communities — substantive, on-topic discussion.
+  - id: forum-gear-specialist
+    match: domain
+    patterns:
+      - "mountainbuzz.com"
+      - "backpackinglight.com"
+      - "bladeforums.com"
+      - "candlepowerforums.com"
+      - "mtbr.com"
+    note: Specialist gear/outdoor communities with empirical, lived-experience threads.
+  - id: community-qa
+    match: domain
+    patterns:
+      - "metafilter.com"
+      - "stackexchange.com"
+      - "stackoverflow.com"
+      - "superuser.com"
+      - "news.ycombinator.com"
+      - "lobste.rs"
+    note: Community Q&A / discussion with independent answers.
   - id: forum-generic
     match: regex
     patterns:
-      - "(?i)//(forum|forums|community|community-forum)\\."
-      - "(?i)/(forum|forums|community|threads|viewtopic)"
-    note: Specialist forums and community boards about the topic.
-  - id: forum-known-communities
-    match: domain
-    patterns:
-      - "hackernews"
-      - "news.ycombinator.com"
-      - "lobste.rs"
-      - "discourse"
-    note: Established discussion communities.
+      - "(?i)//(forum|forums|community|board|boards)\\."
+      - "(?i)/(forum|forums|community|threads|viewtopic|showthread|/t/)"
+    note: Specialist forums and community boards (substantive discussion).
 
-low:
-  - id: marketplace
+medium:
+  - id: marketplace-reviews
     match: domain
     patterns:
       - "amazon."
       - "bol.com"
       - "ebay."
-      - "aliexpress."
       - "walmart.com"
       - "coolblue."
-    note: Webshops optimise for conversion; reviews are gameable and commercial.
+      - "rei.com"
+    note: Marketplaces host real user reviews (lived experience) — but gameable, so
+      within-source skepticism applies. Ranked above blogs, below specialist fora.
+  - id: review-platforms
+    match: domain
+    patterns:
+      - "trustpilot."
+      - "influenster.com"
+      - "consumerreports.org"
+      - "ask.metafilter.com"
+    note: User-review / consumer-feedback platforms (aggregated lived experience).
+
+low:
+  - id: manufacturer-blog
+    match: regex
+    patterns:
+      - "(?i)/(blog|blogs|news|press|stories)(/|$)"
+    note: Manufacturer/brand blogs are marketing, not lived experience.
   - id: manufacturer-store
     match: regex
     patterns:
-      - "(?i)/(shop|store|product|products|buy|cart|checkout)(/|$|\\?)"
+      - "(?i)/(shop|store|product|products|buy|cart|checkout|collections)(/|$|\\?)"
     note: Manufacturer/seller pages present marketing, not lived experience.
   - id: affiliate-toplist
     match: regex
     patterns:
-      - "(?i)(best-|top-?\\d+|top-?ten|-review-|buying-guide|/reviews?/)"
+      - "(?i)(best-|top-?\\d+|top-?ten|-review-|/reviews?/|buying-guide)"
       - "(?i)(bestof|best-of|vergelijk|beste-)"
-    note: Top-N lists and buying guides are the dominant affiliate/SEO format.
+    note: Top-N lists, buying guides and review posts — the dominant affiliate/SEO format.
+  - id: known-affiliate-blogs
+    match: domain
+    patterns:
+      - "homegrounds.co"
+      - "perfectdailygrind.com"
+      - "thespruceeats.com"
+      - "gearjunkie.com"
+      - "wirecutter.com"
+      - "thegadgeteer.com"
+      - "imprintnow.com"
+    note: Known affiliate/SEO review blogs (gift/coffee/gear niche).
   - id: sponsored-seo
     match: regex
     patterns:

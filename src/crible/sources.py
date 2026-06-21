@@ -49,12 +49,15 @@ class _Rule:
         raise TierListError(f"rule {self.id}: unknown match type {self.match!r}")
 
 
+# Evaluation order: best evidence first, first match wins.
+_TIER_ORDER = ("high", "medium", "low")
+
+
 class TierList:
     """The seeded trust-tier classifier."""
 
-    def __init__(self, high: list[_Rule], low: list[_Rule]) -> None:
-        # High rules are evaluated before low rules (first match wins).
-        self._rules = high + low
+    def __init__(self, rules: list[_Rule]) -> None:
+        self._rules = rules
 
     @classmethod
     def load(cls, path: Path) -> TierList:
@@ -62,9 +65,10 @@ class TierList:
         if not path.exists():
             raise TierListError(f"source tier list not found: {path}")
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        high = cls._parse(data.get("high", []), "high")
-        low = cls._parse(data.get("low", []), "low")
-        return cls(high, low)
+        rules: list[_Rule] = []
+        for tier in _TIER_ORDER:
+            rules.extend(cls._parse(data.get(tier, []), tier))
+        return cls(rules)
 
     @staticmethod
     def _parse(entries: list[dict], tier: str) -> list[_Rule]:

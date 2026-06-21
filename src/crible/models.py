@@ -51,6 +51,7 @@ class Finding:
     candidate: str
     kind: str  # "failure" | "support"
     claim: str
+    criterion: str = ""  # which requirement/disqualifier this finding addresses
     severity: str = "unknown"  # "disqualifying" | "minor" | "unknown" (failures only)
     sources: list[Source] = field(default_factory=list)
     corroboration_count: int = 0
