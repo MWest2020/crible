@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 
 from .models import Candidate, Criteria, Finding
 
-_CREDIBLE_TIERS = ("high", "medium")
+_CREDIBLE_TIERS = ("high", "medium", "unknown")
 
 
 def _credible_host_count(findings: list[Finding]) -> int:
@@ -137,9 +137,9 @@ def render(criteria: Criteria, ranked: list[Candidate], corroboration_threshold:
     if unevidenced:
         lines.append("## Insufficient credible evidence")
         lines.append(
-            "_Considered, but supported only by blogs / marketing / unclassified pages "
-            "(an echo chamber) — no credible fora or user-review corroboration, so not "
-            "recommended:_"
+            "_Considered, but supported only by marketing / affiliate pages, or too few "
+            "independent sources — no verified user-experience (review / forum) "
+            "corroboration met the floor, so not recommended:_"
         )
         for cand in unevidenced:
             suffix = f" — ⚠ {cand.caveat}" if cand.caveat else ""
