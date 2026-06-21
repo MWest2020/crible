@@ -492,8 +492,8 @@ class Orchestrator:
                         detail=(
                             f"~{estimate} tokens needed per candidate but only {remaining} "
                             f"left of {self.config.token_ceiling}; model '{self.config.model}' "
-                            f"is too token-heavy for this ceiling. Raise --token-ceiling or use "
-                            f"a cheaper model (e.g. --model claude-haiku-4-5)."
+                            f"is too token-heavy for this ceiling. Raise --token-ceiling, "
+                            f"reduce --max-subagents, or use a cheaper model."
                         ),
                         tokens_used=self.client.tokens_used,
                         candidates_done=done,
