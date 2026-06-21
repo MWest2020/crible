@@ -55,3 +55,23 @@ No implementation code yet — proposal awaits approval.
   disqualification, audit redaction, config defaults. Ruff clean.
 - Remaining: run-wide query dedup (3.4), interactive disqualifier ask-back (4.2), the live
   worked-example run (12.x), and opt-in parallel subagents (13.x).
+
+### 2026-06-21 — Live worked-example validation (Haiku 4.5)
+
+- Made adaptive thinking + `effort` model-aware (`Config.uses_advanced_reasoning`) — both 400
+  on Haiku 4.5 / older models; now sent only for the modern Opus/Sonnet/Fable tier.
+- Ran the thermos example end-to-end on Haiku 4.5 twice:
+  - Run 1 (ceiling 150k): validated the pipeline + the cost-ceiling halt, but a single
+    subagent's basic (unfiltered) `web_search` consumed ~187k tokens before others ran, and
+    `extract()` saw only prose so findings came back ungrounded and were dropped.
+  - Fixes: thread the actually-visited URLs into the extraction prompt and drop any invented
+    source_url; lower per-thread defaults to 3 searches / 3 iterations.
+  - Run 2 (ceiling 350k): completed normally (~200k tokens), 29 findings, grounded advice in
+    the prescribed format.
+- Honest finding: of ~50 cited sources only 2 were high-trust; 28 were `unknown`, 20 `low`.
+  The disqualification gate (≥2 corroborations in a high-trust source) therefore never fired,
+  so "Avoid" was empty despite 13 failure-findings, and recommendations leaned on
+  affiliate/manufacturer sources. Next: expand `source_tiers.yaml` (affiliate-review domains,
+  manufacturer `/blog` → low), steer subagent search toward high-trust domains, and lower the
+  `unknown` ranking weight; a dynamic-filtering-search model (Sonnet/Opus) would help most.
+- Marked tasks 12.1 / 12.2 / 12.3 with the caveats above.

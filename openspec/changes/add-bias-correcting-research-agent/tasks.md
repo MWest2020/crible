@@ -82,10 +82,14 @@
 
 ## 12. MVP verification against the worked example
 
-- [ ] 12.1 Run the thermos example end-to-end single-threaded (needs a live API key + token spend)
-- [ ] 12.2 Confirm recommended models have no metallic-taste failure mode corroborated in
-      independent high-trust sources
-- [ ] 12.3 Confirm the audit trail reconstructs the full run
+- [x] 12.1 Run the thermos example end-to-end single-threaded (done on Haiku 4.5; ~200k
+      tokens, completed normally, produced grounded advice)
+- [x] 12.2 Confirm recommended models have no metallic-taste failure mode corroborated in
+      independent high-trust sources (gate works; satisfied — but only 2 high-trust sources
+      surfaced, so the disqualification path was effectively untested; needs better source
+      steering + tier-list tuning before this is meaningful)
+- [x] 12.3 Confirm the audit trail reconstructs the full run (verified: queries, sources,
+      classifications, skepticism rules, scores and the stop/cost events all present)
 
 ## 13. Parallelisation (only after MVP is verified)
 
