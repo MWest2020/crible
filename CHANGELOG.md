@@ -31,6 +31,15 @@ blog tokens, adds at most one bounded re-search — no multiplier).
   triggers exactly one bounded re-search; floor-not-met emits the caveat and the advice
   surfaces it; extra-passes clamped to 1. Ruff clean.
 - README updated with the new flags/env vars and behaviour.
+- **Verified live (Haiku 4.5, ~194k tokens / ~$0.55)**: cited source mix high 7 / medium 6 /
+  unknown 4 / **low 0** (vs high 2 / low 20 pre-steering); the bounded re-search lifted
+  Zojirushi over the floor (1 → 2); KeepCup stayed below after re-search and got the
+  `evidence-mix-floor-not-met` caveat surfaced in advice; Avoid disambiguated (Hydro Flask +
+  Klean Kanteen disqualified on ≥2 high-trust sources). **Known limitation**: Haiku's basic
+  `web_search_20250305` rejects `allowed_domains`/`blocked_domains`, so the run degraded
+  gracefully to unsteered search — the quality gain on Haiku came from query augmentation +
+  the evidence-mix floor, not domain steering. Domain steering applies only on
+  `web_search_20260209` (Opus/Sonnet) and remains to be verified actually-applying there.
 
 ### 2026-06-21 — Initial OpenSpec proposal
 
