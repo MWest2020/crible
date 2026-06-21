@@ -4,6 +4,23 @@ All notable changes to this project are documented here. Dates are ISO 8601.
 
 ## [Unreleased]
 
+### 2026-06-21 — Proof = genuine user experience; retrieval targets reviews + fora
+
+Operator decision after a run where verified quotes came from review blogs + manufacturer
+(not lived experience): proof must be genuine user experience, and retrieval must surface it.
+
+- **Credible = high + medium only** (forum/community posts + marketplace/review-platform USER
+  reviews). Review blogs / unlisted (`unknown`, weight 0.1) and affiliate/manufacturer (`low`,
+  0.0) are CONTEXT — shown with their verified quotes but never recommended.
+- **Advice "Context only — no lived-experience proof"** section now shows each context
+  candidate's claims + verified quotes + links (so blog/shop context is visible to judge), not
+  just a name list.
+- **Retrieval targets real user experience**: query templates now hit `site:reddit.com`, forum
+  threads, `site:amazon.com` reviews, and "customer reviews"; the extraction prompt defines
+  proof as user experience (manufacturer/review-blog = context). web_search surfaces reddit/
+  forum URLs and our client fetch reads them (Anthropic's crawler can't).
+- Tests 33; ruff clean.
+
 ### 2026-06-21 — Pre-fetch → extract (fixes the low-trust quote bias)
 
 A live run showed post-hoc quote verification was perverse: clean marketing/shop pages matched

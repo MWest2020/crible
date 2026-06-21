@@ -21,12 +21,11 @@ from urllib.parse import urlparse
 from .models import Finding, Source
 from .sources import TierList
 
-# Tiers that count as real evidence. Since findings are now grounded in a
-# verbatim quote VERIFIED against the fetched page (pre-fetch → extract), a real
-# user-experience quote counts even from a forum/review the seed list doesn't
-# name (unknown). Only explicit "low" (affiliate / manufacturer / top-10 / SEO)
-# stays mere context — never proof on its own.
-CREDIBLE_TIERS = ("high", "medium", "unknown")
+# Tiers that count as PROOF (genuine lived experience): forum/community posts
+# (high) and marketplace / review-platform USER reviews (medium). Review blogs
+# and unlisted pages (unknown) and explicit marketing/affiliate (low) are CONTEXT
+# only — shown with their quotes, but they never earn a recommendation.
+CREDIBLE_TIERS = ("high", "medium")
 
 # Cap on the model-reported corroboration count, to bound hallucinated inflation.
 _MAX_CORROBORATION = 25

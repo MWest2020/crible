@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 
 from .models import Candidate, Criteria, Finding
 
-_CREDIBLE_TIERS = ("high", "medium", "unknown")
+_CREDIBLE_TIERS = ("high", "medium")  # genuine lived experience (fora + user reviews)
 
 
 def _credible_host_count(findings: list[Finding]) -> int:
@@ -135,15 +135,21 @@ def render(criteria: Criteria, ranked: list[Candidate], corroboration_threshold:
         lines.append("")
 
     if unevidenced:
-        lines.append("## Insufficient credible evidence")
+        lines.append("## Context only — no lived-experience proof")
         lines.append(
-            "_Considered, but supported only by marketing / affiliate pages, or too few "
-            "independent sources — no verified user-experience (review / forum) "
+            "_Considered. Context found (blogs / shops / manufacturer), shown below with "
+            "quotes so you can judge — but NO genuine user-experience (forum / user-review) "
             "corroboration met the floor, so not recommended:_"
         )
         for cand in unevidenced:
-            suffix = f" — ⚠ {cand.caveat}" if cand.caveat else ""
-            lines.append(f"- {cand.name}{suffix}")
-        lines.append("")
+            caveat = f" — ⚠ {cand.caveat}" if cand.caveat else ""
+            lines.append(f"### {cand.name}{caveat}")
+            for f in [x for x in cand.findings if x.kind == "support"][:4]:
+                crit = f" [{f.criterion}]" if f.criterion else ""
+                lines.append(f"- {f.claim}{crit}")
+                if f.quote:
+                    lines.append(f"  > “{f.quote}”")
+                lines.extend(_links([f]))
+            lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"

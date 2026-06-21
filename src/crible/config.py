@@ -72,11 +72,13 @@ class Config:
     # specific failure mode in lived experience.
     query_templates: list[str] = field(
         default_factory=lambda: [
+            # find the topic's own community, then real user experiences in it
             "best {topic} forum OR community",
-            "{topic} enthusiast forum recommendations",
-            "{candidate} {disqualifier} forum",
-            "{candidate} {disqualifier} reddit",
-            "{candidate} {disqualifier} review",
+            "{candidate} {disqualifier} site:reddit.com",
+            "{candidate} {disqualifier} forum thread",
+            # genuine user reviews on marketplaces (the reviews page, not the listing)
+            "{candidate} reviews site:amazon.com",
+            "{candidate} customer reviews {disqualifier}",
             "{candidate} long-term review experience",
         ]
     )

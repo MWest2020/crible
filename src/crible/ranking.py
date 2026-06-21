@@ -18,22 +18,21 @@ from __future__ import annotations
 
 from .models import Candidate, Finding
 
-# Tier weights for evidence strength (operator hierarchy: discussion > reviews >
-# unlisted-but-real > marketing). A verified quote from an unlisted forum/review
-# (unknown) is real lived experience and counts, just below named review platforms.
-# Only explicit "low" (affiliate / manufacturer / top-10 / SEO) carries no weight —
-# it is context, never proof.
-_TIER_WEIGHT = {"high": 1.0, "medium": 0.6, "unknown": 0.5, "low": 0.0}
+# Tier weights. PROOF tiers (genuine lived experience): high (fora) and medium
+# (marketplace / review-platform user reviews). Context tiers carry almost no
+# weight — unknown (review blogs / unlisted) 0.1, low (affiliate / manufacturer)
+# 0.0 — so they never drive a recommendation, only appear as shown context.
+_TIER_WEIGHT = {"high": 1.0, "medium": 0.6, "unknown": 0.1, "low": 0.0}
 _SEVERITY_WEIGHT = {"disqualifying": 1.0, "minor": 0.4, "unknown": 0.4}
 
 
 def _support_weight(finding: Finding) -> float:
-    trust = max((_TIER_WEIGHT.get(s.tier, 0.5) for s in finding.sources), default=0.0)
+    trust = max((_TIER_WEIGHT.get(s.tier, 0.1) for s in finding.sources), default=0.0)
     return trust * finding.corroboration_count
 
 
 def _failure_penalty(finding: Finding) -> float:
-    trust = max((_TIER_WEIGHT.get(s.tier, 0.5) for s in finding.sources), default=0.0)
+    trust = max((_TIER_WEIGHT.get(s.tier, 0.1) for s in finding.sources), default=0.0)
     severity = _SEVERITY_WEIGHT.get(finding.severity, 0.4)
     return trust * finding.corroboration_count * severity
 

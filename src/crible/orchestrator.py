@@ -320,7 +320,9 @@ class Orchestrator:
             f"Investigate {candidate.name} against the user's criteria using ONLY the "
             f"source texts below.\nRequirements: {criteria.positive}\n"
             f"Disqualifiers to hunt: {criteria.disqualifiers}\n\n"
-            "Prefer real USER EXPERIENCES (reviews, forum posts) over marketing copy. "
+            "PROOF means genuine USER EXPERIENCE — a forum/community post or a real user "
+            "review on a shop/review platform. Manufacturer pages and review blogs are "
+            "context, not proof. Prefer quotes where a user speaks from experience. "
             "For each finding, 'quote' MUST be copied VERBATIM from the text of the source "
             "you cite, and 'source_urls' MUST contain that source's URL exactly. Use only "
             "the sources listed below.\n\n" + "\n\n".join(blocks)
