@@ -75,3 +75,23 @@ No implementation code yet — proposal awaits approval.
   manufacturer `/blog` → low), steer subagent search toward high-trust domains, and lower the
   `unknown` ranking weight; a dynamic-filtering-search model (Sonnet/Opus) would help most.
 - Marked tasks 12.1 / 12.2 / 12.3 with the caveats above.
+
+### 2026-06-21 — Tier-list tuning + disqualifier-first steering (operator feedback)
+
+- Operator review of run 2 found findings drifting to temperature instead of the taste
+  disqualifier, no specialist fora, and a flat trust scheme. Changes:
+  - Three-tier evidence hierarchy in `source_tiers.yaml` (high: specialist fora /
+    discussion; medium: user-review platforms; low: blogs / affiliate / manufacturer),
+    reweighted high 1.0 > medium 0.55 > unknown 0.25 > low 0.1.
+  - Disqualifier-first subagent steering: hunt the stated disqualifier specifically, drop
+    off-criterion padding, tag each finding's `criterion`, prefer fora/reviews over blogs.
+  - Lowered default `effort` to medium after a Sonnet 4.6 run blew a 300k ceiling on a single
+    ~500k-token landscape call at effort=high (effort multiplies tokens across ~12 calls/run).
+    Note: the token ceiling is a between-call gate, so a single heavy call can overshoot it —
+    a true per-call hard cap remains a TODO.
+- Re-ran the thermos example on Haiku 4.5 with the tuning (~202k tokens, ~$0.55): source mix
+  improved from high 2 / unknown 28 to high 7 / medium 6 / unknown 8; findings now centre on
+  the taste disqualifier; the Avoid section correctly disqualified the Klean Kanteen on a
+  metallic-taste failure corroborated by 4 users across two high-trust fora. This reproduces
+  the spec's worked example (recommend ceramic-coated, reject the offending stainless model).
+- Tests: 18 passing; ruff clean.
