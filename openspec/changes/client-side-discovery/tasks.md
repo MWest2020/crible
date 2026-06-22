@@ -25,5 +25,9 @@
 
 ## 4. Verify (free, on subscription)
 
-- [ ] 4.1 Run the thermos query; confirm reddit threads now appear in source_visited and the
-      advice (the reddit gap closed)
+- [x] 4.1 Run the thermos query; confirm reddit threads now appear and reach the advice.
+      VERIFIED (2026-06-22, free subscription run): discovery surfaced 9 reddit URLs incl. the
+      exact `lfcpyk` thread. First run exposed a second-half gap — `www.reddit.com` served our
+      client a JS shell (10 pages = 37 chars, no findings). Fixed by fetching `old.reddit.com`
+      (server-rendered). Re-run: reddit pages now 5.7k–30k chars and **5 findings cite reddit**
+      with verbatim quotes (r/BuyItForLife, r/Coffee) shown in advice.md. Gap closed.
