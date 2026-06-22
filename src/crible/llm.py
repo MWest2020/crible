@@ -48,7 +48,13 @@ class LLMClient:
 
     def __init__(self, config: Config) -> None:
         self.config = config
-        kwargs: dict[str, Any] = {"api_key": config.resolve_api_key()}
+        kwargs: dict[str, Any] = {}
+        if config.auth_mode == "subscription":
+            # Let the SDK resolve the Claude OAuth credential (ant profile /
+            # ANTHROPIC_AUTH_TOKEN). OAuth on /v1/messages needs this beta header.
+            kwargs["default_headers"] = {"anthropic-beta": "oauth-2025-04-20"}
+        else:
+            kwargs["api_key"] = config.resolve_api_key()
         if config.base_url:
             kwargs["base_url"] = config.base_url
         self._client = anthropic.Anthropic(**kwargs)

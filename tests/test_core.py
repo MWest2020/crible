@@ -182,6 +182,23 @@ def test_audit_line_is_standalone_json(tmp_path: Path) -> None:
 
 # ---- config ---------------------------------------------------------------
 
+def test_subscription_mode_needs_no_api_key(monkeypatch) -> None:
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    cfg = load_config(auth_mode="subscription")
+    assert cfg.resolve_api_key() == ""  # no key required in subscription mode
+
+
+def test_api_key_mode_still_requires_key(monkeypatch) -> None:
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with pytest.raises(ConfigError):
+        load_config().resolve_api_key()
+
+
+def test_invalid_auth_mode_rejected() -> None:
+    with pytest.raises(ConfigError):
+        load_config(auth_mode="bogus")
+
+
 def test_config_defaults_are_safe() -> None:
     cfg = load_config()
     assert cfg.parallelism_enabled is False  # default OFF

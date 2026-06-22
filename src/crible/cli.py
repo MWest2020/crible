@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -87,6 +88,11 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         type=float,
         help="token-overlap ratio to accept a quote as grounded (default 0.8)",
     )
+    p.add_argument(
+        "--subscription",
+        action="store_true",
+        help="auth via a Claude OAuth credential (ant profile) instead of an API key",
+    )
     p.add_argument("--runs-dir", help="directory for run outputs (default: runs/)")
     return p.parse_args(argv)
 
@@ -94,15 +100,20 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv if argv is not None else sys.argv[1:])
 
-    # Optional .env load (never displayed by us).
-    try:
-        from dotenv import load_dotenv
+    subscription = args.subscription or os.environ.get("CRIBLE_AUTH_MODE") == "subscription"
+    # Load .env (for the API key) ONLY in api-key mode; in subscription mode a
+    # stray ANTHROPIC_API_KEY would shadow the OAuth credential, so don't load it.
+    if not subscription:
+        try:
+            from dotenv import load_dotenv
 
-        load_dotenv()
-    except ImportError:  # pragma: no cover - optional dependency
-        pass
+            load_dotenv()
+        except ImportError:  # pragma: no cover - optional dependency
+            pass
 
     overrides: dict = {}
+    if subscription:
+        overrides["auth_mode"] = "subscription"
     if args.model:
         overrides["model"] = args.model
     if args.effort:

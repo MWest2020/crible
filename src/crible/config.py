@@ -44,6 +44,10 @@ class Config:
     model: str = "claude-opus-4-8"
     base_url: str | None = None  # override endpoint (sovereign deployments)
     api_key_env: str = "ANTHROPIC_API_KEY"
+    # "api_key" = pay-per-token API key from the env; "subscription" = a Claude
+    # OAuth credential (e.g. from `ant auth login`) resolved by the SDK, which
+    # counts against the plan instead of per-token billing.
+    auth_mode: str = "api_key"
     # Effort multiplies thinking + tool tokens on EVERY call; this agent makes
     # ~12 calls per run, so "medium" is the safer default. Bump to high/xhigh
     # (e.g. on Opus) only when you want maximum quality and accept the cost.
@@ -137,9 +141,11 @@ class Config:
     def resolve_api_key(self) -> str:
         """Read the API key from the environment; fail fast if absent.
 
-        Never returns the key into a log or the audit trail — callers pass it
-        straight to the SDK client.
+        In subscription mode no API key is needed — the SDK resolves the OAuth
+        credential. Never returns the key into a log or the audit trail.
         """
+        if self.auth_mode == "subscription":
+            return ""  # SDK resolves the OAuth profile / ANTHROPIC_AUTH_TOKEN
         key = os.environ.get(self.api_key_env, "").strip()
         if not key:
             raise ConfigError(
@@ -150,8 +156,12 @@ class Config:
 
     def redaction_values(self) -> list[str]:
         """Secret values that must be scrubbed from any audit output."""
-        key = os.environ.get(self.api_key_env, "").strip()
-        return [key] if key else []
+        vals = []
+        for env in (self.api_key_env, "ANTHROPIC_AUTH_TOKEN"):
+            v = os.environ.get(env, "").strip()
+            if v:
+                vals.append(v)
+        return vals
 
     def effective_settings(self) -> dict[str, Any]:
         """Non-secret settings recorded in the audit trail for reproducibility."""
@@ -175,6 +185,8 @@ def load_config(**overrides: Any) -> Config:
     cfg = Config()
 
     env = os.environ
+    if v := env.get("CRIBLE_AUTH_MODE"):
+        cfg.auth_mode = v.strip()
     if v := env.get("CRIBLE_MODEL"):
         cfg.model = v
     if v := env.get("CRIBLE_PROVIDER"):
@@ -215,6 +227,8 @@ def load_config(**overrides: Any) -> Config:
             raise ConfigError(f"unknown config override: {key}")
         setattr(cfg, key, value)
 
+    if cfg.auth_mode not in ("api_key", "subscription"):
+        raise ConfigError("auth_mode must be 'api_key' or 'subscription'")
     if cfg.token_ceiling <= 0:
         raise ConfigError("token_ceiling must be positive")
     if cfg.corroboration_threshold < 1:
