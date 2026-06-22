@@ -531,6 +531,18 @@ def test_no_disqualifier_means_vacuously_proven() -> None:
     assert _disqualifier_proven(cand, []) is True
 
 
+def test_themed_match_general_safety_counts_for_safety_disqualifier() -> None:
+    from crible.advice import _addresses_disqualifier
+    safe = Finding(candidate="A", kind="support", claim="safest trampolines",
+                   criterion="safe design")
+    # general safety praise addresses a pinch-point/safety disqualifier (loosened)
+    assert _addresses_disqualifier(safe, ["known pinch-point injury hazards"]) is True
+    # but a heat finding does NOT count toward a taste disqualifier
+    hot = Finding(candidate="A", kind="support", claim="keeps coffee hot 6h",
+                  criterion="keeps coffee hot")
+    assert _addresses_disqualifier(hot, ["metallic taste"]) is False
+
+
 def test_quote_attribution_guard_drops_offtopic(monkeypatch, tmp_path) -> None:
     # A quote about a DIFFERENT product (Stanley) must not attach to Zojirushi.
     url = "https://www.home-barista.com/t/9"

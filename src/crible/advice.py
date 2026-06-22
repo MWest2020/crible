@@ -23,16 +23,44 @@ from .skepticism import candidate_credible_strength
 _CREDIBLE_TIERS = ("high", "medium")  # genuine lived experience (fora + user reviews)
 
 
+# Explicit theme groups so a support finding on a related theme (e.g. general
+# "safe design") counts toward a same-theme disqualifier (e.g. "pinch-point
+# injury"). Auditable keyword sets — no learned scoring.
+_THEMES: dict[str, set[str]] = {
+    "safety": {"safe", "safety", "safest", "secure", "sturdy", "stable", "injury",
+               "injuries", "hazard", "hazards", "pinch", "sharp", "danger", "dangerous",
+               "risk", "enclosure", "net", "spring", "springs"},
+    "taste": {"taste", "tastes", "flavor", "flavour", "metallic", "metal", "smell",
+              "odor", "odour", "aftertaste"},
+    "leak": {"leak", "leaks", "leaking", "spill", "spills", "seal", "leakproof",
+             "watertight"},
+    "heat": {"hot", "heat", "insulation", "insulated", "temperature", "thermal", "warm"},
+    "durability": {"durable", "durability", "break", "broke", "broken", "rust", "crack",
+                   "cracked", "wear", "flimsy"},
+    "noise": {"noise", "noisy", "loud", "quiet", "rattle", "squeak"},
+}
+
+
+def _themes_of(text: str) -> set[str]:
+    toks = set(re.findall(r"\w+", text.lower()))
+    return {theme for theme, words in _THEMES.items() if toks & words}
+
+
 def _addresses_disqualifier(finding: Finding, disqualifiers: list[str]) -> bool:
-    """True if the finding's criterion is about one of the disqualifiers."""
+    """True if the finding addresses one of the disqualifiers — by direct token
+    overlap OR a shared theme (so general 'safe design' counts toward a 'pinch-point'
+    safety disqualifier, while 'keeps hot' does NOT count toward a 'taste' one)."""
     crit = finding.criterion.lower()
     ctokens = set(re.findall(r"\w+", crit))
+    fthemes = _themes_of(f"{finding.criterion} {finding.claim}")
     for d in disqualifiers:
         dl = d.lower()
         if (dl and dl in crit) or (crit and crit in dl):
             return True
         dtokens = {t for t in re.findall(r"\w+", dl) if len(t) > 3}
         if dtokens & ctokens:
+            return True
+        if _themes_of(d) & fthemes:
             return True
     return False
 
