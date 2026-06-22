@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Dates are ISO 8601.
 
 ## [Unreleased]
 
+### 2026-06-22 — Community-derived candidates (kill invented/obscure SKUs)
+
+Runs showed the limiting factor had moved upstream: the LEAD *invented* candidates, sometimes
+obscure/near-hallucinated SKUs (e.g. "Sunlife by Zhejiang Weilai") with zero lived-experience
+coverage — so retrieval found nothing about them and results came back empty.
+
+- **`build_landscape` now derives candidates from community discussion** (`_landscape_pages`):
+  it searches the topic's fora/reviews (`best <topic> reddit`, `what <topic> do you recommend
+  forum`, `site:reddit.com`, owner reviews), fetches the top pages, and extracts the SPECIFIC
+  products (brand + model) that **real users actually discuss** — only products mentioned in
+  the fetched texts, with provenance = the URL where each was discussed. This guarantees every
+  candidate has lived-experience coverage and removes invented SKUs. Falls back to
+  model-proposed candidates only when fetching is off / nothing fetchable.
+- Tests: 39 (+1: candidates derived from fetched community text). Ruff clean.
+
 ### 2026-06-21 — Disqualifier-depth gate, quote-attribution guard, readable run IDs
 
 - **Disqualifier-depth**: a candidate is "Recommended" only if it has credible

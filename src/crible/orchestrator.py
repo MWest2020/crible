@@ -184,21 +184,80 @@ class Orchestrator:
 
     # ---- stage 2: landscape + plan ---------------------------------------
 
-    def build_landscape(self, criteria: Criteria) -> list[Candidate]:
+    def _landscape_pages(self, criteria: Criteria):
+        """Search the topic's communities/reviews and fetch the top pages, so
+        candidates can be DERIVED from what real users discuss (not invented)."""
+        topic = criteria.topic or criteria.question
+        disq = criteria.disqualifiers[0] if criteria.disqualifiers else ""
+        queries = [
+            f"best {topic} reddit",
+            f"what {topic} do you recommend forum",
+            f"best {topic} {disq}".strip(),
+            f"{topic} {disq} site:reddit.com".strip(),
+            f"{topic} owners review experience",
+        ]
+        qblock = "\n".join(f"- {q}" for q in queries)
         prompt = (
-            f"Question: {criteria.question}\n"
-            f"Requirements: {criteria.positive}\n"
-            f"Disqualifiers: {criteria.disqualifiers}\n"
-            f"Budget: {criteria.budget}\nContext: {criteria.context}\n\n"
-            "Build the candidate landscape and the research plan."
+            f"Find which SPECIFIC products (brand + model) real users discuss and recommend "
+            f"for: {criteria.question}\nTopic: {topic}\n\n"
+            f"Run web searches including these, favouring forums and user reviews:\n{qblock}"
         )
-        research = self.client.research(_LANDSCAPE_SYSTEM, prompt)
-        for q in research.queries:
-            self.log.log(ev.EVENT_QUERY, stage="landscape", query=q)
+        merged: list[Source] = []
+        passes = [
+            ("landscape-high-trust", {"allowed_domains": self._allow_domains or None}),
+            ("landscape-open", {"blocked_domains": self._block_domains or None}),
+        ]
+        for label, steer in passes:
+            research = self.client.research(_LANDSCAPE_SYSTEM, prompt, **steer)
+            self.log.log(
+                ev.EVENT_SEARCH_DOMAINS, stage="landscape", pass_=label,
+                allowed=research.allowed_domains or [], blocked=research.blocked_domains or [],
+                degraded=research.degraded, degraded_reason=research.degraded_reason,
+            )
+            for q in research.queries:
+                self.log.log(ev.EVENT_QUERY, stage="landscape", query=q)
+            merged.extend(research.sources)
+        uniq, seen = [], set()
+        for s in classify_sources(self.tier_list, merged):
+            if s.url not in seen:
+                seen.add(s.url)
+                uniq.append(s)
+        uniq.sort(key=lambda s: self._FETCH_RANK.get(s.tier, 2))
+        pages = []
+        for s in uniq[: self.config.max_fetch_pages_per_finding]:
+            text = self._fetcher.fetch(s.url)
+            self.log.log(
+                ev.EVENT_FETCH, stage="landscape", url=s.url, tier=s.tier,
+                ok=bool(text), chars=len(text or ""),
+            )
+            if text:
+                pages.append((s, text))
+        return pages
+
+    def build_landscape(self, criteria: Criteria) -> list[Candidate]:
+        pages = self._landscape_pages(criteria) if self.config.fetch_enabled else []
+        if pages:
+            blocks = [
+                f"[SOURCE {i}] {s.url} (trust: {s.tier})\n{t[: self.config.fetch_prompt_chars]}"
+                for i, (s, t) in enumerate(pages, 1)
+            ]
+            prompt = (
+                "From the community / review texts below, extract the SPECIFIC products "
+                "(exact brand + model) that real users actually discuss or recommend for the "
+                "need — ONLY products mentioned in these texts, not ones you invent. Set each "
+                "candidate's provenance to the source URL where it was discussed. Add a "
+                "one-line research plan per candidate.\n"
+                f"Need: {criteria.question}\nRequirements: {criteria.positive}\n"
+                f"Disqualifiers: {criteria.disqualifiers}\n\n" + "\n\n".join(blocks)
+            )
+        else:
+            prompt = (
+                f"Question: {criteria.question}\nRequirements: {criteria.positive}\n"
+                f"Disqualifiers: {criteria.disqualifiers}\n\n"
+                "Build the candidate set (SPECIFIC products) and a short research plan."
+            )
         data = self.client.extract(
-            system=_LANDSCAPE_SYSTEM,
-            prompt=f"From this research, return the candidate set and plan:\n\n{research.text}",
-            schema=_LANDSCAPE_SCHEMA,
+            system=_LANDSCAPE_SYSTEM, prompt=prompt, schema=_LANDSCAPE_SCHEMA
         )
         candidates = [
             Candidate(name=c["name"], provenance=c.get("provenance", ""))

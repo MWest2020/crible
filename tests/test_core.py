@@ -563,6 +563,25 @@ def test_run_dir_is_slug_forward(tmp_path) -> None:
     assert "T" not in d.name and "Z" not in d.name  # no ugly ISO stamp
 
 
+def test_build_landscape_derives_from_community(monkeypatch, tmp_path) -> None:
+    # Candidates are extracted from fetched community text, not invented.
+    url = "https://www.reddit.com/r/coffee/best-thermos"
+    fake = _FakeClient(
+        research_results=[_rr(url), _rr("")],  # two landscape search passes
+        extract_results=[{
+            "candidates": [{"name": "Zojirushi SM-SF48", "provenance": url}],
+            "plan": ["hunt metallic taste reports"],
+        }],
+    )
+    orch = _make_orchestrator(monkeypatch, fake, tmp_path)
+    orch.config.fetch_enabled = True
+    orch._fetcher = _FakeFetcher("reddit: people love the Zojirushi SM-SF48, no metal taste at all")
+    cands = orch.build_landscape(Criteria(question="best thermos", topic="travel thermos"))
+    assert [c.name for c in cands] == ["Zojirushi SM-SF48"]
+    assert cands[0].provenance == url
+    assert fake.research_calls == 2  # community search (two passes)
+
+
 def test_quote_is_rendered_in_advice() -> None:
     from crible.advice import render
     src = [Source(url="https://www.reddit.com/r/coffee/1", tier="high")]
