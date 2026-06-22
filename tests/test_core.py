@@ -459,6 +459,35 @@ def test_content_fetcher_dead_and_extract() -> None:
     assert http.calls == 2  # cached: 2 distinct URLs, second fetch not re-requested
 
 
+def test_reddit_is_fetched_via_old_mirror() -> None:
+    # www.reddit.com serves a JS shell to a simple client; we must GET old.reddit.com
+    # (server-rendered) while keeping the canonical URL as the cache key / cited link.
+    from crible.fetch import ContentFetcher
+
+    class _Resp:
+        def __init__(self, text):
+            self.status_code = 200
+            self.text = text
+
+    class _HTTP:
+        def __init__(self):
+            self.requested = []
+        def get(self, url):
+            self.requested.append(url)
+            body = "<p>real thread content</p>" if "old.reddit.com" in url else "<p></p>"
+            return _Resp(body)
+        def close(self):
+            pass
+
+    http = _HTTP()
+    f = ContentFetcher(client=http)
+    canonical = "https://www.reddit.com/r/Coffee/comments/lfcpyk/title/"
+    text = f.fetch(canonical)
+    assert http.requested == ["https://old.reddit.com/r/Coffee/comments/lfcpyk/title/"]
+    assert "real thread content" in text
+    assert canonical in f._cache  # cached/cited under the original URL
+
+
 class _FakeFetcher:
     def __init__(self, text):
         self._text = text

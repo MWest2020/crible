@@ -94,10 +94,27 @@ class ContentFetcher:
         self._cache[url] = text
         return text
 
+    @staticmethod
+    def _fetchable_url(url: str) -> str:
+        """Map a URL to a server-rendered variant our simple client can read.
+
+        reddit's `www.`/`np.` pages serve a JS app shell (no thread text) to a
+        non-browser client, while `old.reddit.com` server-renders the full
+        comment tree as plain HTML. We rewrite only for the GET; the original URL
+        stays the cache key and the cited link (what the user clicks).
+        """
+        return re.sub(
+            r"^(https?://)(?:www\.|np\.)?reddit\.com/",
+            r"\1old.reddit.com/",
+            url,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+
     def _do_fetch(self, url: str) -> str | None:
         client = self._ensure_client()
         try:
-            resp = client.get(url)
+            resp = client.get(self._fetchable_url(url))
             if resp.status_code in (404, 410) or resp.status_code >= 500:
                 return None
             text = html_to_text(resp.text)[: self.max_chars]

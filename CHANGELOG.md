@@ -4,6 +4,16 @@ All notable changes to this project are documented here. Dates are ISO 8601.
 
 ## [Unreleased]
 
+### 2026-06-22 — Fetch reddit via the server-rendered mirror (finish closing the gap)
+
+A verify run exposed the other half of the reddit gap: discovery now surfaces the threads
+(incl. the exact `lfcpyk` one), and the fetch returns HTTP 200 — but `www.reddit.com` serves
+our simple client a JS app shell, so 10 reddit pages came back as **37 chars** of text, no
+quotes, no findings. `old.reddit.com` server-renders the full comment tree as plain HTML
+(verified: 348 KB vs an 8.5 KB shell; the `.json` endpoint is 403-blocked). The fetcher now
+rewrites `www.`/`np.`reddit.com → `old.reddit.com` **for the GET only** — the canonical URL
+stays the cache key and the cited link the user clicks. Tests 50 (+1).
+
 ### 2026-06-22 — Client-side discovery (close the reddit gap)
 
 Measured: 1181 visited sources across all runs, 0 from reddit — Anthropic's web_search never
