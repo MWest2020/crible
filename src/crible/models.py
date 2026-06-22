@@ -26,7 +26,9 @@ class Criteria:
     disqualifiers: list[str] = field(default_factory=list)
     budget: str | None = None
     context: str | None = None
-    clarification_needed: str | None = None  # set when a disqualifier is missing
+    # Specificity gate: is the question specific + measurable enough to research?
+    specific_enough: bool = True
+    clarifying_questions: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

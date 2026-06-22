@@ -87,6 +87,9 @@ class Config:
         ]
     )
 
+    # Input gate: refuse to run an over-vague question (saves quota) unless forced.
+    require_specific: bool = True
+
     # Skepticism / ranking.
     corroboration_threshold: int = 2  # >= 2 independent corroborations
 

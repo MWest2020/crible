@@ -613,13 +613,18 @@ class Orchestrator:
         self.log.log(ev.EVENT_RUN_SETTINGS, **self.config.effective_settings())
 
         criteria = self.extract_criteria(question)
-        if criteria.clarification_needed:
-            # Disqualifier-first: surface the question instead of guessing.
+        # Input gate: refuse to spend a run on an over-vague question; ask the user
+        # to make it specific + measurable first (unless --force).
+        if self.config.require_specific and not criteria.specific_enough:
             self.log.log(
-                ev.EVENT_NOTE,
-                stage="criteria",
-                clarification_needed=criteria.clarification_needed,
+                ev.EVENT_STOP, reason="input_too_vague",
+                clarifying_questions=criteria.clarifying_questions,
             )
+            document = advice_mod.render_needs_detail(criteria)
+            self.log.write_json("advice.md", document)
+            self._links.close()
+            self._fetcher.close()
+            return criteria, [], document
 
         candidates: list[Candidate] = []
         try:

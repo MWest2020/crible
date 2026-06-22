@@ -4,6 +4,16 @@ All notable changes to this project are documented here. Dates are ISO 8601.
 
 ## [Unreleased]
 
+### 2026-06-22 — Input specificity gate (block vague prompts before spending)
+
+A vague prompt ("a safe trampoline") can't yield a good result and just burns a run. Criteria
+extraction now judges `specific_enough` and, when false, returns `clarifying_questions`; the
+orchestrator **stops before any search** (only the one cheap criteria call is spent) and the
+advice asks the user to make the question specific + measurable. `--force` /
+`require_specific=False` bypasses. Verified live: "a safe trampoline" → blocked with
+"age? budget? which safety features? size?". Tests 44 (+1). Replaces the old
+`clarification_needed` field with `specific_enough` + `clarifying_questions`.
+
 ### 2026-06-22 — Recognise more real forums (classification recall)
 
 A free subscription run found genuine parent lived-experience on a parenting forum

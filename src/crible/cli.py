@@ -93,6 +93,11 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="auth via a Claude OAuth credential (ant profile) instead of an API key",
     )
+    p.add_argument(
+        "--force",
+        action="store_true",
+        help="run even if the question is too vague (skip the specificity gate)",
+    )
     p.add_argument("--runs-dir", help="directory for run outputs (default: runs/)")
     return p.parse_args(argv)
 
@@ -128,6 +133,8 @@ def main(argv: list[str] | None = None) -> int:
         overrides["evidence_mix_floor"] = args.evidence_mix_floor
     if args.evidence_extra_passes is not None:
         overrides["evidence_research_extra_passes"] = args.evidence_extra_passes
+    if args.force:
+        overrides["require_specific"] = False
     if args.no_domain_steering:
         overrides["domain_steering_enabled"] = False
     if args.no_fetch:

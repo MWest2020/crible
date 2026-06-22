@@ -25,6 +25,10 @@ uv run crible "the best travel thermos for quality coffee, no metallic taste"
 per-token, and `.env` is not loaded so a stray API key can't shadow the OAuth credential.
 `web_search` is supported on OAuth. (Automating a personal subscription is a ToS gray area.)
 
+**Specificity gate.** A vague question (e.g. "a safe trampoline") can't be researched well, so
+Crible stops before spending a run and asks you to make it specific and measurable (budget, the
+exact failure to avoid, size/context). Pass `--force` to run anyway.
+
 Each run writes a directory under `runs/` containing `audit.jsonl` (the full trail),
 `plan.json` (the LEAD plan), and `advice.md` (the recommendation). Tune behaviour with
 `--model`, `--effort`, `--token-ceiling`, `--max-subagents`, `--corroboration-threshold`,

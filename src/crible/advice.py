@@ -100,6 +100,28 @@ def _links(findings: list[Finding]) -> list[str]:
     return out
 
 
+def render_needs_detail(criteria: Criteria) -> str:
+    """Shown when the question is too vague to research — ask for specifics first,
+    rather than spending a run on a prompt that can't yield a good result."""
+    lines = ["# Crible — your question needs to be more specific", ""]
+    lines.append(f"**You asked:** {criteria.question}")
+    lines.append("")
+    lines.append(
+        "_This is too broad to research well, and running it would waste a search "
+        "budget. Make it specific and measurable — answer these, then re-run "
+        "(or pass `--force` to run anyway):_"
+    )
+    questions = criteria.clarifying_questions or [
+        "What's your budget or price range?",
+        "What specific problem or failure must it avoid?",
+        "What's the context/use (who, where, how often)?",
+    ]
+    for q in questions:
+        lines.append(f"- {q}")
+    lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def render(criteria: Criteria, ranked: list[Candidate], corroboration_threshold: int = 2) -> str:
     """Produce the Markdown advice document for one run."""
     lines: list[str] = ["# Crible advice", ""]

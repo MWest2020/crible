@@ -592,6 +592,23 @@ def test_run_dir_is_slug_forward(tmp_path) -> None:
     assert "T" not in d.name and "Z" not in d.name  # no ugly ISO stamp
 
 
+def test_vague_question_is_gated_before_spending(monkeypatch, tmp_path) -> None:
+    # An over-vague question is stopped before any search (saves quota).
+    fake = _FakeClient(
+        research_results=[],
+        extract_results=[{
+            "topic": "trampoline", "positive": [], "disqualifiers": [],
+            "budget": None, "context": None, "specific_enough": False,
+            "clarifying_questions": ["What's your budget?", "What size/space?"],
+        }],
+    )
+    orch = _make_orchestrator(monkeypatch, fake, tmp_path)
+    _crit, ranked, doc = orch.run("a safe trampoline")
+    assert ranked == []
+    assert fake.research_calls == 0  # gated before any landscape/subagent search
+    assert "more specific" in doc and "What's your budget?" in doc
+
+
 def test_build_landscape_derives_from_community(monkeypatch, tmp_path) -> None:
     # Candidates are extracted from fetched community text, not invented.
     url = "https://www.reddit.com/r/coffee/best-thermos"
