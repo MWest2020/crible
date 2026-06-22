@@ -244,9 +244,11 @@ class Orchestrator:
             prompt = (
                 "From the community / review texts below, extract the SPECIFIC products "
                 "(exact brand + model) that real users actually discuss or recommend for the "
-                "need — ONLY products mentioned in these texts, not ones you invent. Set each "
-                "candidate's provenance to the source URL where it was discussed. Add a "
-                "one-line research plan per candidate.\n"
+                "need; set each one's provenance to the source URL where it was discussed. "
+                "If fewer than 5 such products appear, ALSO add well-known, widely-available "
+                "specific products (brand + model) for this need (provenance: 'well-known') so "
+                "there are enough candidates. Avoid obscure or unbranded items. Add a one-line "
+                "research plan per candidate.\n"
                 f"Need: {criteria.question}\nRequirements: {criteria.positive}\n"
                 f"Disqualifiers: {criteria.disqualifiers}\n\n" + "\n\n".join(blocks)
             )
