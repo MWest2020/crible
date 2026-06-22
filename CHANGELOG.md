@@ -4,6 +4,16 @@ All notable changes to this project are documented here. Dates are ISO 8601.
 
 ## [Unreleased]
 
+### 2026-06-22 — Auth banner: show credential source on every run (before any spend)
+
+Every run now prints one stderr line before any network call stating the auth mode and
+credential source, so cost is never a surprise:
+- `auth=api_key · credential=$ANTHROPIC_API_KEY · PAY-PER-TOKEN (draws API credits) · …`
+- `auth=subscription · credential=OAuth via ant profile · counts against your plan (no API
+  credits) · …` — and if a stray `ANTHROPIC_API_KEY` is in the env it appends
+  `NOTE: … will be IGNORED (not billed)`.
+The secret value is never printed (only the env-var name). Tests 53 (+1).
+
 ### 2026-06-22 — SECURITY/COST: --subscription can no longer be billed via a stray API key
 
 A user reported API credits draining despite running `--subscription`. Root cause: subscription

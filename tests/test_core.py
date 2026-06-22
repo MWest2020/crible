@@ -200,6 +200,27 @@ def test_invalid_auth_mode_rejected() -> None:
         load_config(auth_mode="bogus")
 
 
+def test_auth_banner_states_credential_source(monkeypatch) -> None:
+    from crible.cli import _auth_banner
+
+    # api-key mode: must clearly say it draws credits + name the env var
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-x")
+    b = _auth_banner(load_config())
+    assert "auth=api_key" in b and "PAY-PER-TOKEN" in b and "ANTHROPIC_API_KEY" in b
+    assert "sk-ant-x" not in b  # never leaks the value
+
+    # subscription mode with a stray key present: must say it will be IGNORED
+    b = _auth_banner(load_config(auth_mode="subscription"))
+    assert "auth=subscription" in b and "no API credits" in b
+    assert "IGNORED" in b  # stray key flagged
+    assert "sk-ant-x" not in b
+
+    # subscription mode, no stray key: clean line, no IGNORED note
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    b = _auth_banner(load_config(auth_mode="subscription"))
+    assert "auth=subscription" in b and "IGNORED" not in b
+
+
 def test_subscription_mode_strips_stray_api_key(monkeypatch) -> None:
     # The trap: --subscription must NEVER let a paid ANTHROPIC_API_KEY in the env
     # bill the run. LLMClient must remove it before constructing the SDK client so

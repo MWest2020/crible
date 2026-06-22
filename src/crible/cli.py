@@ -26,8 +26,31 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .audit import AuditLog
-from .config import ConfigError, load_config
+from .config import Config, ConfigError, load_config
 from .orchestrator import Orchestrator
+
+
+def _auth_banner(config: Config) -> str:
+    """One stderr line: auth mode + credential source, so cost is visible BEFORE
+    any network call. Never prints the secret value — only the env-var name."""
+    ceil = f"{config.token_ceiling:,}"
+    if config.auth_mode == "subscription":
+        src = (
+            "OAuth via ANTHROPIC_AUTH_TOKEN"
+            if os.environ.get("ANTHROPIC_AUTH_TOKEN")
+            else "OAuth via ant profile"
+        )
+        note = ""
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            note = " · NOTE: a stray ANTHROPIC_API_KEY is present and will be IGNORED (not billed)"
+        return (
+            f"crible: auth=subscription · credential={src} · counts against your plan "
+            f"(no API credits) · model={config.model} · token-ceiling={ceil}{note}"
+        )
+    return (
+        f"crible: auth=api_key · credential=${config.api_key_env} · "
+        f"PAY-PER-TOKEN (draws API credits) · model={config.model} · token-ceiling={ceil}"
+    )
 
 
 def _slug(text: str) -> str:
@@ -157,6 +180,10 @@ def main(argv: list[str] | None = None) -> int:
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+
+    # Make the credential source visible BEFORE any network call (and before the
+    # LLM client strips a stray key in subscription mode), so cost is never a surprise.
+    print(_auth_banner(config), file=sys.stderr)
 
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     run_dir = _run_dir(config.runs_dir, _slug(args.question), stamp)
