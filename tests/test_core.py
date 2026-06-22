@@ -754,6 +754,31 @@ def test_discovered_urls_are_merged_into_retrieved_sources(monkeypatch, tmp_path
     assert thread in seen  # discovered reddit URL merged into the retrieved set
 
 
+def test_subagent_runs_disqualifier_desire_path_discovery(monkeypatch, tmp_path) -> None:
+    # The generic comparison threads (where lived-experience disqualifier verdicts live)
+    # are found by the DESIRE-PATH query (topic + "no" + disqualifier), not by the
+    # candidate-specific one. The subagent must issue both.
+    from crible.discovery import Discovery
+
+    queries: list[str] = []
+
+    class _Spy:
+        name = "duckduckgo"
+        def search(self, q, n):
+            queries.append(q)
+            return []
+
+    fake = _FakeClient(research_results=[_rr(""), _rr("")], extract_results=[])
+    orch = _make_orchestrator(monkeypatch, fake, tmp_path)
+    orch._discovery = Discovery(backend=_Spy(), enabled=True, max_results=5)
+    orch.investigate(
+        Criteria(question="q", topic="travel thermos", disqualifiers=["metallic taste"]),
+        Candidate(name="Zojirushi SM-SF48"),
+    )
+    assert "Zojirushi SM-SF48 metallic taste" in queries  # candidate-specific
+    assert "travel thermos no metallic taste" in queries  # desire-path (finds lfcpyk)
+
+
 def test_quote_is_rendered_in_advice() -> None:
     from crible.advice import render
     src = [Source(url="https://www.reddit.com/r/coffee/1", tier="high")]

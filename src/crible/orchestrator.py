@@ -595,8 +595,17 @@ class Orchestrator:
                 text_parts.append(research.text)
 
         # Augment with client-side discovery (reddit etc.) the provider's search misses.
+        # Two complementary queries: the candidate-specific one, AND the disqualifier
+        # desire-path query (what a user actually googles, e.g. "travel thermos no
+        # metallic taste"). The latter surfaces the GENERIC comparison threads where
+        # lived-experience verdicts on the disqualifier across products live — these
+        # name candidates by brand, so extraction can attribute a quote to this one.
+        # The desire-path query is candidate-independent, so the cache makes it ~free.
         disq = criteria.disqualifiers[0] if criteria.disqualifiers else ""
         merged_sources.extend(self._discover(f"{candidate.name} {disq}".strip(), "subagent"))
+        if disq:
+            topic = criteria.topic or criteria.question
+            merged_sources.extend(self._discover(f"{topic} no {disq}".strip(), "subagent"))
 
         self._ingest(criteria, candidate, merged_sources, "\n".join(text_parts))
 

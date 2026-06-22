@@ -4,6 +4,19 @@ All notable changes to this project are documented here. Dates are ISO 8601.
 
 ## [Unreleased]
 
+### 2026-06-22 — Desire-path discovery query (surface generic comparison threads)
+
+A run found Zojirushi strong on heat but parked it under "disqualifier NOT proven" — yet the
+exact reddit thread proving it (`lfcpyk`: "Zojirushi have a nonstick inner coating ... no
+issues with metallic tasting coffee") was never surfaced. Root cause: the subagent only
+searched `{candidate} {disqualifier}` ("Zojirushi SM-SF48 metallic taste"), which returns
+product pages — never the GENERIC comparison thread where cross-product disqualifier verdicts
+actually live. Probed live: the desire-path query (`{topic} no {disqualifier}`, e.g. "travel
+thermos no metallic taste" — what a user literally googles) surfaces `lfcpyk` + a whole cluster
+of metallic-taste threads. The subagent now issues BOTH queries; the desire-path one is
+candidate-independent so the per-run cache makes it ~1 extra call. Confirmed the fetched thread
+grounds the user's quote at score 1.0. Tests 51 (+1).
+
 ### 2026-06-22 — Fetch reddit via the server-rendered mirror (finish closing the gap)
 
 A verify run exposed the other half of the reddit gap: discovery now surfaces the threads
