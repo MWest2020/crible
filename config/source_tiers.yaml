@@ -57,7 +57,17 @@ high:
     patterns:
       - "(?i)//(forum|forums|community|board|boards)\\."
       - "(?i)/(forum|forums|community|threads|viewtopic|showthread|/t/)"
-    note: Specialist forums and community boards (substantive discussion).
+      - "(?i)/(jforum|viewforum|posts/list|discussion|discussions)"
+    note: Specialist forums and community boards (substantive discussion), incl.
+      common forum-software URL signatures (jforum, phpBB viewforum, posts/list).
+  - id: community-known
+    match: domain
+    patterns:
+      - "dcurbanmom.com"
+      - "babycenter.com"
+      - "mumsnet.com"
+      - "city-data.com"
+    note: Large parenting / local community forums with lived-experience threads.
 
 medium:
   - id: marketplace-reviews

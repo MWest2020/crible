@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Dates are ISO 8601.
 
 ## [Unreleased]
 
+### 2026-06-22 — Recognise more real forums (classification recall)
+
+A free subscription run found genuine parent lived-experience on a parenting forum
+(dcurbanmom.com, jforum software, URL `/jforum/posts/list/`) but classified it `unknown`, so
+the candidate fell one host short of the floor. Broadened forum detection (jforum / viewforum
+/ posts/list / discussion URL signatures) and added known parenting/community domains
+(dcurbanmom, babycenter, mumsnet, city-data) to the high tier. Tests 42; ruff clean.
+
+
 ### 2026-06-22 — Subscription (OAuth) auth for the testing phase
 
 To stop per-token burn during development, Crible can now run on a Claude **subscription**:
