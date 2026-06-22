@@ -22,8 +22,11 @@ uv run crible "the best travel thermos for quality coffee, no metallic taste"
 **subscription** instead, install the Anthropic CLI
 (`go install github.com/anthropics/anthropic-cli/cmd/ant@latest`), `ant auth login`, then pass
 `--subscription` (or `CRIBLE_AUTH_MODE=subscription`) — usage counts against your plan, not
-per-token, and `.env` is not loaded so a stray API key can't shadow the OAuth credential.
-`web_search` is supported on OAuth. (Automating a personal subscription is a ToS gray area.)
+per-token. `.env` is not loaded AND any `ANTHROPIC_API_KEY` already in the environment is
+**stripped before the SDK client is built** (with a stderr warning), so a stray paid key can
+never silently bill a subscription run — the SDK resolves the env key before the OAuth profile
+otherwise. `web_search` is supported on OAuth. (Automating a personal subscription is a ToS
+gray area.)
 
 **Specificity gate.** A vague question (e.g. "a safe trampoline") can't be researched well, so
 Crible stops before spending a run and asks you to make it specific and measurable (budget, the

@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -197,6 +198,29 @@ def test_api_key_mode_still_requires_key(monkeypatch) -> None:
 def test_invalid_auth_mode_rejected() -> None:
     with pytest.raises(ConfigError):
         load_config(auth_mode="bogus")
+
+
+def test_subscription_mode_strips_stray_api_key(monkeypatch) -> None:
+    # The trap: --subscription must NEVER let a paid ANTHROPIC_API_KEY in the env
+    # bill the run. LLMClient must remove it before constructing the SDK client so
+    # the SDK falls through to the OAuth credential.
+    import crible.llm as llm
+
+    captured = {}
+
+    class _FakeAnthropic:
+        def __init__(self, **kwargs):
+            captured["kwargs"] = kwargs
+            # the key must already be gone from the env at construction time
+            captured["env_key"] = os.environ.get("ANTHROPIC_API_KEY")
+
+    monkeypatch.setattr(llm.anthropic, "Anthropic", _FakeAnthropic)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-should-be-ignored")
+    cfg = load_config(auth_mode="subscription")
+    llm.LLMClient(cfg)
+    assert captured["env_key"] is None  # stripped before the SDK could read it
+    assert "api_key" not in captured["kwargs"]  # not passed explicitly either
+    assert os.environ.get("ANTHROPIC_API_KEY") is None  # removed from the process
 
 
 def test_config_defaults_are_safe() -> None:

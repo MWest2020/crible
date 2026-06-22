@@ -4,6 +4,22 @@ All notable changes to this project are documented here. Dates are ISO 8601.
 
 ## [Unreleased]
 
+### 2026-06-22 — SECURITY/COST: --subscription can no longer be billed via a stray API key
+
+A user reported API credits draining despite running `--subscription`. Root cause: subscription
+mode only *added the OAuth beta header* — it did not pin the credential. The Anthropic SDK
+(0.111) resolves `ANTHROPIC_API_KEY` (paid, draws credits) BEFORE the OAuth profile, so any
+stray key in the environment was silently billed despite `--subscription`. The audit trail
+showed the heavy spend (≈4.5M tokens) was in api_key-mode runs (mostly 2026-06-21); the
+discovery-verification runs were subscription-mode (≈1.5M tokens) and used OAuth — but the
+guarantee was accidental (no key happened to be in the env), not enforced.
+
+Fix: in subscription mode `LLMClient` now `os.environ.pop("ANTHROPIC_API_KEY")` BEFORE
+constructing the SDK client (and never passes it explicitly), forcing the SDK to fall through
+to the OAuth credential. If a key was present it is ignored with a clear stderr warning (value
+never logged). `--subscription` now *means* subscription regardless of shell state. Tests 52
+(+1). Check actual spend at console.anthropic.com → Usage.
+
 ### 2026-06-22 — Desire-path discovery query (surface generic comparison threads)
 
 A run found Zojirushi strong on heat but parked it under "disqualifier NOT proven" — yet the

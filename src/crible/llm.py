@@ -9,16 +9,22 @@
 # A separate `extract` call returns validated JSON via output_config.format —
 # the "boring" structured-output path, used to condense findings and criteria.
 #
-# Model and provider are configurable (sovereign/cloud split). The API key is
-# passed straight to the SDK; it is never logged.
+# Model and provider are configurable (sovereign/cloud split). In api-key mode the
+# key is passed straight to the SDK and never logged; in subscription mode any
+# ANTHROPIC_API_KEY in the env is stripped before the client is built so a paid key
+# can never silently bill a subscription run (the SDK resolves the env key before
+# the OAuth profile otherwise).
 #
 # Writes: read-only (network egress to the configured provider + open web)
 # Idempotent: no (LLM calls)
-# Requires: anthropic SDK; a valid API key in the environment
+# Requires: anthropic SDK; an API key (api-key mode) OR an OAuth credential
+#           (subscription mode: `ant auth login` / ANTHROPIC_AUTH_TOKEN)
 
 from __future__ import annotations
 
 import json
+import os
+import sys
 from dataclasses import dataclass
 from typing import Any
 
@@ -50,8 +56,19 @@ class LLMClient:
         self.config = config
         kwargs: dict[str, Any] = {}
         if config.auth_mode == "subscription":
-            # Let the SDK resolve the Claude OAuth credential (ant profile /
-            # ANTHROPIC_AUTH_TOKEN). OAuth on /v1/messages needs this beta header.
+            # Guarantee the PAID API key can never bill a subscription run. The SDK
+            # resolves ANTHROPIC_API_KEY (paid, draws credits) BEFORE the OAuth
+            # profile, so a stray key in the environment would silently bill credits
+            # despite --subscription. Remove it from this process so the SDK falls
+            # through to the OAuth credential (ant profile / ANTHROPIC_AUTH_TOKEN).
+            leaked = os.environ.pop("ANTHROPIC_API_KEY", None)
+            if leaked:
+                sys.stderr.write(
+                    "crible: --subscription is set; ignoring ANTHROPIC_API_KEY found "
+                    "in the environment so it cannot be billed (using the OAuth "
+                    "subscription credential instead).\n"
+                )
+            # OAuth on /v1/messages needs this beta header.
             kwargs["default_headers"] = {"anthropic-beta": "oauth-2025-04-20"}
         else:
             kwargs["api_key"] = config.resolve_api_key()
