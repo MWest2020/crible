@@ -628,6 +628,103 @@ def test_build_landscape_derives_from_community(monkeypatch, tmp_path) -> None:
     assert fake.research_calls == 2  # community search (two passes)
 
 
+def test_reddit_backend_parses_threads() -> None:
+    from crible.discovery import RedditBackend
+
+    class _Resp:
+        status_code = 200
+        request = None
+        def json(self):
+            return {"data": {"children": [
+                {"data": {"permalink": "/r/Coffee/comments/lfcpyk/thermos/", "title": "metallic taste"}},
+                {"data": {"permalink": "/r/Coffee/comments/abc/x/", "title": "x"}},
+                {"data": {"title": "no permalink"}},
+            ]}}
+
+    class _HTTP:
+        def get(self, url, params=None):
+            assert "search.json" in url
+            return _Resp()
+
+    b = RedditBackend(client=_HTTP())
+    out = b.search("thermos metallic taste", 5)
+    assert [s.url for s in out] == [
+        "https://www.reddit.com/r/Coffee/comments/lfcpyk/thermos/",
+        "https://www.reddit.com/r/Coffee/comments/abc/x/",
+    ]
+
+
+def test_ddg_backend_parses_and_unwraps() -> None:
+    from crible.discovery import DuckDuckGoBackend
+
+    html = (
+        '<a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.reddit.com'
+        '%2Fr%2FCoffee%2Fcomments%2Flfcpyk%2Fx%2F&rut=z">thread</a>'
+        '<a class="result__a" href="https://home-barista.com/t/9">forum</a>'
+    )
+
+    class _Resp:
+        status_code = 200
+        request = None
+        text = html
+
+    class _HTTP:
+        def get(self, url, params=None):
+            return _Resp()
+
+    b = DuckDuckGoBackend(client=_HTTP())
+    urls = [s.url for s in b.search("thermos metallic taste", 6)]
+    assert "https://www.reddit.com/r/Coffee/comments/lfcpyk/x/" in urls  # uddg unwrapped
+    assert "https://home-barista.com/t/9" in urls
+
+
+def test_discovery_degrades_on_error() -> None:
+    from crible.discovery import Discovery
+
+    class _Boom:
+        name = "reddit"
+        def search(self, q, n):
+            raise RuntimeError("429 blocked")
+
+    d = Discovery(backend=_Boom(), enabled=True, max_results=5)
+    assert d.discover("anything") == []   # degrades, no raise
+    assert "429" in d.last_error
+
+
+def test_discovery_disabled_returns_empty() -> None:
+    from crible.discovery import Discovery
+    d = Discovery(enabled=False)
+    assert d.discover("x") == []
+
+
+def test_discovered_urls_are_merged_into_retrieved_sources(monkeypatch, tmp_path) -> None:
+    # The provider's web_search returns nothing; client-side discovery surfaces the
+    # reddit thread, and it must reach _ingest (the retrieved source set).
+    from crible.discovery import Discovery
+
+    thread = "https://www.reddit.com/r/Coffee/comments/lfcpyk/thermos_metallic_taste/"
+
+    class _Found:
+        name = "duckduckgo"
+        def search(self, q, n):
+            return [Source(url=thread, title="metallic taste thread")]
+
+    fake = _FakeClient(research_results=[_rr(""), _rr("")], extract_results=[])
+    orch = _make_orchestrator(monkeypatch, fake, tmp_path)
+    orch._discovery = Discovery(backend=_Found(), enabled=True, max_results=5)
+
+    seen: list[str] = []
+    real_ingest = orch._ingest
+    def _spy(criteria, candidate, sources, search_text):
+        seen.extend(s.url for s in sources)
+        return real_ingest(criteria, candidate, sources, search_text)
+    orch._ingest = _spy
+
+    orch.investigate(Criteria(question="q", disqualifiers=["metallic taste"]),
+                     Candidate(name="X"))
+    assert thread in seen  # discovered reddit URL merged into the retrieved set
+
+
 def test_quote_is_rendered_in_advice() -> None:
     from crible.advice import render
     src = [Source(url="https://www.reddit.com/r/coffee/1", tier="high")]

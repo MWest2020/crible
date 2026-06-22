@@ -27,6 +27,7 @@ from . import ranking as ranking_mod
 from . import verify as verify_mod
 from .audit import AuditLog
 from .config import Config
+from .discovery import Discovery
 from .fetch import ContentFetcher, quote_matches
 from .links import LinkChecker
 from .llm import CostCeilingReached, LLMClient
@@ -174,6 +175,20 @@ class Orchestrator:
             max_chars=config.max_fetch_chars, enabled=config.fetch_enabled
         )
         self._candidate_brands: set[str] = set()  # set after landscape, for attribution
+        self._discovery = Discovery(
+            backend_name=config.discovery_backend,
+            enabled=config.discovery_enabled,
+            max_results=config.max_discovery_results,
+        )
+
+    def _discover(self, query: str, stage: str) -> list[Source]:
+        """Client-side discovery (reddit etc.) for a query; logged + degradable."""
+        found = self._discovery.discover(query)
+        self.log.log(
+            ev.EVENT_DISCOVERY, stage=stage, backend=self._discovery.backend_name,
+            query=query, count=len(found), error=self._discovery.last_error,
+        )
+        return found
 
     # ---- stage 1: criteria ------------------------------------------------
 
@@ -217,6 +232,8 @@ class Orchestrator:
             for q in research.queries:
                 self.log.log(ev.EVENT_QUERY, stage="landscape", query=q)
             merged.extend(research.sources)
+        # Augment candidate discovery with what communities (reddit etc.) discuss.
+        merged.extend(self._discover(f"best {topic} {disq}".strip(), "landscape"))
         uniq, seen = [], set()
         for s in classify_sources(self.tier_list, merged):
             if s.url not in seen:
@@ -577,6 +594,10 @@ class Orchestrator:
             if research.text:
                 text_parts.append(research.text)
 
+        # Augment with client-side discovery (reddit etc.) the provider's search misses.
+        disq = criteria.disqualifiers[0] if criteria.disqualifiers else ""
+        merged_sources.extend(self._discover(f"{candidate.name} {disq}".strip(), "subagent"))
+
         self._ingest(criteria, candidate, merged_sources, "\n".join(text_parts))
 
         # Evidence-mix floor: bounded one-shot high-trust re-search on breach.
@@ -624,6 +645,7 @@ class Orchestrator:
             self.log.write_json("advice.md", document)
             self._links.close()
             self._fetcher.close()
+            self._discovery.close()
             return criteria, [], document
 
         candidates: list[Candidate] = []
@@ -686,4 +708,5 @@ class Orchestrator:
         )
         self._links.close()
         self._fetcher.close()
+        self._discovery.close()
         return criteria, ranked, document

@@ -44,6 +44,7 @@ EVENT_FLOOR_NOT_MET = "evidence_mix_floor_not_met"  # loud caveat: too few trust
 # Content grounding (change: ground-evidence-in-fetched-content)
 EVENT_FETCH = "fetch"  # a cited page was fetched (url, ok, chars)
 EVENT_QUOTE_CHECK = "quote_check"  # quote verified against fetched text (matched, score)
+EVENT_DISCOVERY = "discovery"  # client-side discovery (backend, query, count, error)
 
 
 def _redact(value: Any, secrets: list[str]) -> Any:

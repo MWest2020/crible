@@ -84,6 +84,11 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         help="disable client-side page fetch + quote verification (fall back to link-liveness)",
     )
     p.add_argument(
+        "--no-discovery",
+        action="store_true",
+        help="disable client-side discovery (reddit etc.); use only provider web_search",
+    )
+    p.add_argument(
         "--quote-match-ratio",
         type=float,
         help="token-overlap ratio to accept a quote as grounded (default 0.8)",
@@ -139,6 +144,8 @@ def main(argv: list[str] | None = None) -> int:
         overrides["domain_steering_enabled"] = False
     if args.no_fetch:
         overrides["fetch_enabled"] = False
+    if args.no_discovery:
+        overrides["discovery_enabled"] = False
     if args.quote_match_ratio is not None:
         overrides["quote_match_ratio"] = args.quote_match_ratio
     if args.runs_dir:

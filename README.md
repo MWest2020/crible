@@ -64,6 +64,14 @@ fetch, is dropped (no live, grounded quote = no claim). Tune with `--no-fetch` /
 augmentation also hunts the **topic's own specialist community** (`best <topic> forum`), not
 just reddit.
 
+- **Client-side discovery.** Anthropic's `web_search` never returns reddit (its crawler is
+  blocked there), yet reddit is the #1 lived-experience source. Crible discovers those URLs
+  itself via a general search engine (default **DuckDuckGo**, no API key — reddit's own search
+  blocks unauthenticated requests) and feeds them into the same fetch + quote-verify pipeline.
+  Bounded, cached, and degradable: a block is logged (`discovery` audit event) and the run
+  continues. Disable with `--no-discovery` / `CRIBLE_DISCOVERY=0`; switch backend with
+  `CRIBLE_DISCOVERY_BACKEND`.
+
 Run the tests with `uv run pytest`.
 
 ## What this is

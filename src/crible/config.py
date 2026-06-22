@@ -87,6 +87,11 @@ class Config:
         ]
     )
 
+    # Client-side discovery — surface URLs the provider's web_search misses (reddit).
+    discovery_enabled: bool = True
+    discovery_backend: str = "duckduckgo"  # general search that surfaces reddit + fora
+    max_discovery_results: int = 6
+
     # Input gate: refuse to run an over-vague question (saves quota) unless forced.
     require_specific: bool = True
 
@@ -216,6 +221,10 @@ def load_config(**overrides: Any) -> Config:
         cfg.evidence_mix_floor = int(v)
     if v := env.get("CRIBLE_EVIDENCE_EXTRA_PASSES"):
         cfg.evidence_research_extra_passes = int(v)
+    if v := env.get("CRIBLE_DISCOVERY"):
+        cfg.discovery_enabled = v.strip() in ("1", "true", "yes", "on")
+    if v := env.get("CRIBLE_DISCOVERY_BACKEND"):
+        cfg.discovery_backend = v.strip()
     if v := env.get("CRIBLE_VERIFY_LINKS"):
         cfg.verify_links = v.strip() in ("1", "true", "yes", "on")
     if v := env.get("CRIBLE_LINK_TIMEOUT"):

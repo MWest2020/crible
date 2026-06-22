@@ -4,6 +4,20 @@ All notable changes to this project are documented here. Dates are ISO 8601.
 
 ## [Unreleased]
 
+### 2026-06-22 — Client-side discovery (close the reddit gap)
+
+Measured: 1181 visited sources across all runs, 0 from reddit — Anthropic's web_search never
+returns reddit (crawler blocked), the #1 desire-path source. Added a client-side discovery
+layer (`discovery.py`) that surfaces URLs the provider misses and feeds them into the existing
+client-fetch + quote-verify pipeline. Reddit's own search blocks unauthenticated requests, so
+the default backend is **DuckDuckGo** (no key), which returns reddit + forum URLs (verified: it
+surfaces the exact `r/Coffee/.../lfcpyk` thread); reddit thread pages are then client-fetchable.
+Pluggable backend (RedditBackend kept), bounded, cached, degradable (a block is logged and the
+run continues). Wired into landscape + subagent retrieval. Config: `discovery_enabled`
+(default on), `discovery_backend` (default duckduckgo), `max_discovery_results`; `--no-discovery`
++ `CRIBLE_DISCOVERY*`. New `discovery` audit event. Tests 49 (+5). README updated.
+
+
 ### 2026-06-22 — Input specificity gate (block vague prompts before spending)
 
 A vague prompt ("a safe trampoline") can't yield a good result and just burns a run. Criteria
