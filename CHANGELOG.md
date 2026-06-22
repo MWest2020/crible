@@ -4,6 +4,16 @@ All notable changes to this project are documented here. Dates are ISO 8601.
 
 ## [Unreleased]
 
+### 2026-06-22 — Subscription (OAuth) auth for the testing phase
+
+To stop per-token burn during development, Crible can now run on a Claude **subscription**:
+`--subscription` / `CRIBLE_AUTH_MODE=subscription` makes the SDK resolve a Claude OAuth
+credential (via `ant auth login`) and sends the `oauth-2025-04-20` beta header; no API key is
+required and `.env` is skipped so a stray key can't shadow the credential. **Verified** that the
+server-side `web_search` tool works on the OAuth credential (probe: `server_tool_use` +
+`web_search_tool_result` returned), so retrieval is intact. README documents setup. Caveat:
+automating a personal subscription is a ToS gray area; falls back to API key if blocked.
+
 ### 2026-06-22 — Community-derived candidates (kill invented/obscure SKUs)
 
 Runs showed the limiting factor had moved upstream: the LEAD *invented* candidates, sometimes
