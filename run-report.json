@@ -1,13 +1,13 @@
 {
-  "role": "builder",
+  "role": "reviewer",
   "change": "apply-docs-contract",
-  "run_id": "builder-apply-docs-contract-20260713-072013",
+  "run_id": "reviewer-apply-docs-contract-20260713-072405",
   "repo": "https://github.com/MWest2020/crible.git",
   "verdict": "ok",
   "subtype": "success",
-  "total_cost_usd": "0.7930075",
-  "num_turns": "17",
+  "total_cost_usd": "0.4337765",
+  "num_turns": "13",
   "claude_exit": "0",
-  "finished_at": "2026-07-13T07:22:38Z",
-  "diff_hash": "eb4d765f956fee2bc7627a90f657bee1dd8af2bf8494fe33434b6b31b93458e3"
+  "finished_at": "2026-07-13T07:25:25Z",
+  "diff_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 }
