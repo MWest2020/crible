@@ -1,5 +1,9 @@
 # Crible
 
+> **Geparkeerd sinds 2026-09-29** (Mark). Geen actief werk; de zeven open
+> OpenSpec-changes onder `openspec/changes/` blijven staan zoals ze zijn en zijn
+> geen backlog. Wie het weer oppakt, haalt eerst deze regel weg.
+
 > *Crible* (French: "sieve") — a bias-correcting product-research agent.
 
 **Status:** MVP implemented (single-threaded). The OpenSpec change
